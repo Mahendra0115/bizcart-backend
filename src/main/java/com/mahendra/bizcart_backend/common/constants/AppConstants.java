@@ -172,6 +172,8 @@ public final class AppConstants {
 		public static final String REFRESH_TOKEN_COOKIE = "BIZCART_REFRESH_TOKEN";
 		public static final String SAME_SITE_LAX = "Lax";
 		public static final String HMAC_SHA_256 = "HmacSHA256";
+		public static final String CSRF_HEADER = "X-XSRF-TOKEN";
+		public static final String CORS_ALLOWED_HEADERS = "Authorization,Content-Type," + CSRF_HEADER;
 
 		private Auth() {
 		}

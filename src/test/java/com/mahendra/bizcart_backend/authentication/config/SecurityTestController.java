@@ -28,6 +28,11 @@ class SecurityTestController {
 		return ResponseEntity.ok().build();
 	}
 
+	@GetMapping("/auth/csrf")
+	ResponseEntity<Void> csrfToken() {
+		return ResponseEntity.ok().build();
+	}
+
 	@GetMapping("/admin/dashboard")
 	ResponseEntity<Void> adminDashboard() {
 		return ResponseEntity.ok().build();

@@ -15,7 +15,6 @@ import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserRespo
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
-import com.mahendra.bizcart_backend.authentication.repository.LoginAttemptRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -65,7 +64,7 @@ class AuthServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Mock
-	private LoginAttemptRepository loginAttemptRepository;
+	private LoginAttemptRecorder loginAttemptRecorder;
 
 	@Mock
 	private PasswordEncoder passwordEncoder;
@@ -82,7 +81,7 @@ class AuthServiceTest {
 		authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
 		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
 		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
-				refreshTokenRepository, loginAttemptRepository, passwordEncoder, jwtTokenProvider, authenticationProperties,
+				refreshTokenRepository, loginAttemptRecorder, passwordEncoder, jwtTokenProvider, authenticationProperties,
 				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
@@ -161,7 +160,7 @@ class AuthServiceTest {
 		assertThat(refreshTokenCaptor.getValue().getTokenHash()).isNotEqualTo(result.refreshToken());
 
 		ArgumentCaptor<LoginAttempt> loginAttemptCaptor = ArgumentCaptor.forClass(LoginAttempt.class);
-		verify(loginAttemptRepository).save(loginAttemptCaptor.capture());
+		verify(loginAttemptRecorder).record(loginAttemptCaptor.capture());
 		assertThat(loginAttemptCaptor.getValue().isWasSuccessful()).isTrue();
 	}
 
@@ -176,7 +175,7 @@ class AuthServiceTest {
 			.hasMessageContaining(AppConstants.Auth.INVALID_CREDENTIALS);
 
 		ArgumentCaptor<LoginAttempt> loginAttemptCaptor = ArgumentCaptor.forClass(LoginAttempt.class);
-		verify(loginAttemptRepository).save(loginAttemptCaptor.capture());
+		verify(loginAttemptRecorder).record(loginAttemptCaptor.capture());
 		assertThat(loginAttemptCaptor.getValue().isWasSuccessful()).isFalse();
 	}
 

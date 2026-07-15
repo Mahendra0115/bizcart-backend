@@ -36,6 +36,17 @@ class AuthenticatedUserDetailsTest {
 		assertThat(inactive.isEnabled()).isFalse();
 	}
 
+	@Test
+	void unapprovedSellerIsNotSellerApproved() {
+		User seller = user(AccountStatus.ACTIVE);
+		seller.setUserType(UserType.SELLER);
+		seller.setAdminApproved(false);
+
+		AuthenticatedUserDetails details = new AuthenticatedUserDetails(seller, List.of());
+
+		assertThat(details.isSellerApproved()).isFalse();
+	}
+
 	private User user(AccountStatus status) {
 		User user = new User();
 		ReflectionTestUtils.setField(user, "id", 7L);

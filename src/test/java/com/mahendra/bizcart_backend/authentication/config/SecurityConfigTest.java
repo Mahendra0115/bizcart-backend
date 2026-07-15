@@ -14,6 +14,7 @@ import com.mahendra.bizcart_backend.authentication.security.JwtAuthenticationFil
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.security.RestAccessDeniedHandler;
 import com.mahendra.bizcart_backend.authentication.security.RestAuthenticationEntryPoint;
+import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
@@ -58,7 +59,7 @@ import org.springframework.test.web.servlet.MockMvc;
 		"bizcart.auth.jwt.access-token-expiry-seconds=900",
 		"bizcart.auth.cors.allowed-origins=http://localhost:3000",
 		"bizcart.auth.cors.allowed-methods=GET,POST,OPTIONS",
-		"bizcart.auth.cors.allowed-headers=Authorization,Content-Type,X-CSRF-TOKEN",
+		"bizcart.auth.cors.allowed-headers=Authorization,Content-Type,X-XSRF-TOKEN",
 		"bizcart.auth.cors.allow-credentials=true"
 })
 class SecurityConfigTest {
@@ -90,6 +91,23 @@ class SecurityConfigTest {
 	void refreshTokenEndpointDoesNotRequireAccessToken() throws Exception {
 		mockMvc.perform(post("/api/v1/auth/refresh-token").with(csrf()))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void csrfEndpointDoesNotRequireAccessToken() throws Exception {
+		mockMvc.perform(get("/api/v1/auth/csrf"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void configuredCorsHeadersMatchCsrfHeader() throws Exception {
+		mockMvc.perform(options("/api/v1/auth/login")
+				.header(HttpHeaders.ORIGIN, "http://localhost:3000")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.POST.name())
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, AppConstants.Auth.CSRF_HEADER))
+			.andExpect(status().isOk())
+			.andExpect(result -> assertThat(result.getResponse().getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS))
+				.contains(AppConstants.Auth.CSRF_HEADER));
 	}
 
 	@Test
@@ -125,6 +143,15 @@ class SecurityConfigTest {
 		assertProtectedEndpointRejects(AccountStatus.PENDING, true);
 		assertProtectedEndpointRejects(AccountStatus.BLOCKED, true);
 		assertProtectedEndpointRejects(AccountStatus.ACTIVE, false);
+	}
+
+	@Test
+	void protectedEndpointRejectsUnapprovedSellerAtJwtFilter() throws Exception {
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.SELLER, AccountStatus.ACTIVE,
+				true, 1L), List.of("ROLE_SELLER"));
+
+		mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("SELLER")))
+			.andExpect(status().isUnauthorized());
 	}
 
 	@Test

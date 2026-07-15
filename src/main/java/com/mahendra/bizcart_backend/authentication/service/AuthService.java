@@ -8,7 +8,6 @@ import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
-import com.mahendra.bizcart_backend.authentication.repository.LoginAttemptRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -51,7 +50,7 @@ public class AuthService {
 	private final PermissionRepository permissionRepository;
 	private final UserRoleRepository userRoleRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
-	private final LoginAttemptRepository loginAttemptRepository;
+	private final LoginAttemptRecorder loginAttemptRecorder;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final AuthenticationProperties authenticationProperties;
@@ -60,7 +59,7 @@ public class AuthService {
 
 	public AuthService(UserRepository userRepository, RoleRepository roleRepository,
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
-			RefreshTokenRepository refreshTokenRepository, LoginAttemptRepository loginAttemptRepository,
+			RefreshTokenRepository refreshTokenRepository, LoginAttemptRecorder loginAttemptRecorder,
 			PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
 			AuthenticationProperties authenticationProperties, Clock clock) {
 		this.userRepository = userRepository;
@@ -68,7 +67,7 @@ public class AuthService {
 		this.permissionRepository = permissionRepository;
 		this.userRoleRepository = userRoleRepository;
 		this.refreshTokenRepository = refreshTokenRepository;
-		this.loginAttemptRepository = loginAttemptRepository;
+		this.loginAttemptRecorder = loginAttemptRecorder;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtTokenProvider = jwtTokenProvider;
 		this.authenticationProperties = authenticationProperties;
@@ -200,7 +199,7 @@ public class AuthService {
 		loginAttempt.setWasSuccessful(successful);
 		loginAttempt.setFailureReason(failureReason);
 		loginAttempt.setAttemptedAt(LocalDateTime.now(clock));
-		loginAttemptRepository.save(loginAttempt);
+		loginAttemptRecorder.record(loginAttempt);
 	}
 
 	private CurrentUserResponseDto toCurrentUserResponse(User user) {
