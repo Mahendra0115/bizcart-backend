@@ -14,7 +14,7 @@ public class LoginRequestDto {
 	private String email;
 
 	@NotBlank(message = AuthValidationConstants.PASSWORD_REQUIRED)
-	@Size(min = 8, max = 64)
+	@Size(max = 64)
 	private String password;
 
 	public String getEmail() {

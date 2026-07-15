@@ -26,10 +26,10 @@ class LoginRequestDtoValidationTest {
 	}
 
 	@Test
-	void acceptsPasswordWithoutRegistrationComplexityPattern() {
+	void acceptsPasswordWithoutRegistrationLengthOrComplexityPolicy() {
 		LoginRequestDto request = new LoginRequestDto();
 		request.setEmail("customer@example.com");
-		request.setPassword("lowercase");
+		request.setPassword("short");
 
 		assertThat(validator.validate(request)).isEmpty();
 	}
