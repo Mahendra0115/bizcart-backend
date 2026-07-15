@@ -31,6 +31,7 @@ public final class AppConstants {
 		public static final String PERMISSION_ID = "permission_id";
 		public static final String FIRST_NAME = "first_name";
 		public static final String LAST_NAME = "last_name";
+		public static final String USERNAME = "username";
 		public static final String EMAIL = "email";
 		public static final String PHONE = "phone";
 		public static final String PASSWORD = "password";
@@ -68,6 +69,7 @@ public final class AppConstants {
 	public static final class Indexes {
 
 		public static final String UX_USERS_EMAIL = "ux_users_email";
+		public static final String UX_USERS_USERNAME = "ux_users_username";
 		public static final String UX_USERS_PHONE = "ux_users_phone";
 		public static final String IX_USERS_STATUS = "ix_users_status";
 		public static final String IX_USERS_USER_TYPE = "ix_users_user_type";
@@ -121,6 +123,7 @@ public final class AppConstants {
 	public static final class FieldLengths {
 
 		public static final int NAME = 100;
+		public static final int USERNAME = 50;
 		public static final int EMAIL = 255;
 		public static final int PHONE = 20;
 		public static final int PASSWORD = 255;
@@ -135,6 +138,42 @@ public final class AppConstants {
 		public static final int ENUM = 50;
 
 		private FieldLengths() {
+		}
+	}
+
+	public static final class RoleNames {
+
+		public static final String ADMIN = "ADMIN";
+		public static final String SELLER = "SELLER";
+		public static final String CUSTOMER = "CUSTOMER";
+
+		private RoleNames() {
+		}
+	}
+
+	public static final class Auth {
+
+		public static final String API_AUTH_BASE = "/api/v1/auth";
+		public static final String REGISTER_PATH = "/register";
+		public static final String LOGIN_PATH = "/login";
+		public static final String CURRENT_USER_PATH = "/me";
+		public static final String CSRF_PATH = "/csrf";
+		public static final String REGISTER_SUCCESS = "User registered successfully";
+		public static final String LOGIN_SUCCESS = "Login successful";
+		public static final String CURRENT_USER_SUCCESS = "Current user fetched successfully";
+		public static final String CSRF_TOKEN_SUCCESS = "CSRF token fetched successfully";
+		public static final String DUPLICATE_EMAIL = "Email is already registered";
+		public static final String DUPLICATE_USERNAME = "Username is already registered";
+		public static final String INVALID_CREDENTIALS = "Invalid email or password";
+		public static final String ACCOUNT_NOT_ACTIVE = "Account is not active";
+		public static final String EMAIL_NOT_VERIFIED = "Email is not verified";
+		public static final String SELLER_NOT_APPROVED = "Seller account is not approved";
+		public static final String DEFAULT_ROLE_DESCRIPTION = "Default customer role";
+		public static final String REFRESH_TOKEN_COOKIE = "BIZCART_REFRESH_TOKEN";
+		public static final String SAME_SITE_LAX = "Lax";
+		public static final String HMAC_SHA_256 = "HmacSHA256";
+
+		private Auth() {
 		}
 	}
 }

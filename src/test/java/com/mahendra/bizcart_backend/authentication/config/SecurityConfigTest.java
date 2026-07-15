@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 import com.mahendra.bizcart_backend.authentication.security.AuthenticatedUserDetails;
 import com.mahendra.bizcart_backend.authentication.security.CustomUserDetailsService;
@@ -35,6 +36,7 @@ import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,8 +51,10 @@ import org.springframework.test.web.servlet.MockMvc;
 		SecurityConfigTest.TestSecurityBeans.class
 })
 @EnableConfigurationProperties(AuthenticationProperties.class)
+@ActiveProfiles("security-test")
 @TestPropertySource(properties = {
 		"bizcart.auth.jwt.secret=0123456789abcdef0123456789abcdef",
+		"bizcart.auth.token-hash.secret=test-token-hash-0123456789abcdef0123456789abcdef",
 		"bizcart.auth.jwt.access-token-expiry-seconds=900",
 		"bizcart.auth.cors.allowed-origins=http://localhost:3000",
 		"bizcart.auth.cors.allowed-methods=GET,POST,OPTIONS",
@@ -78,14 +82,20 @@ class SecurityConfigTest {
 
 	@Test
 	void publicAuthEndpointDoesNotRequireToken() throws Exception {
-		mockMvc.perform(post("/api/v1/auth/login"))
+		mockMvc.perform(post("/api/v1/auth/login").with(csrf()))
 			.andExpect(status().isOk());
 	}
 
 	@Test
 	void refreshTokenEndpointDoesNotRequireAccessToken() throws Exception {
-		mockMvc.perform(post("/api/v1/auth/refresh-token"))
+		mockMvc.perform(post("/api/v1/auth/refresh-token").with(csrf()))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void cookieAuthenticatedEndpointsRequireCsrf() throws Exception {
+		mockMvc.perform(post("/api/v1/auth/login"))
+			.andExpect(status().isForbidden());
 	}
 
 	@Test

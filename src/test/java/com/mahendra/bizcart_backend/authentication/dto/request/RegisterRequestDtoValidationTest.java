@@ -52,6 +52,7 @@ class RegisterRequestDtoValidationTest {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Test");
 		request.setLastName("User");
+		request.setUsername("test-user");
 		request.setEmail("test@example.com");
 		request.setPhone("+919999999999");
 		request.setPassword("Password@123");

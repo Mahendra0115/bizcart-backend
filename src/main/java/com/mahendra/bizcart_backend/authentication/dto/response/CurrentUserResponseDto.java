@@ -8,6 +8,7 @@ public record CurrentUserResponseDto(
 		Long id,
 		String firstName,
 		String lastName,
+		String username,
 		String email,
 		String phone,
 		String profileImage,

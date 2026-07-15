@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 @Table(name = AppConstants.Tables.USERS,
 		indexes = {
 				@Index(name = AppConstants.Indexes.UX_USERS_EMAIL, columnList = AppConstants.Columns.EMAIL, unique = true),
+				@Index(name = AppConstants.Indexes.UX_USERS_USERNAME, columnList = AppConstants.Columns.USERNAME,
+						unique = true),
 				@Index(name = AppConstants.Indexes.UX_USERS_PHONE, columnList = AppConstants.Columns.PHONE, unique = true),
 				@Index(name = AppConstants.Indexes.IX_USERS_STATUS, columnList = AppConstants.Columns.STATUS),
 				@Index(name = AppConstants.Indexes.IX_USERS_USER_TYPE, columnList = AppConstants.Columns.USER_TYPE)
@@ -28,6 +30,9 @@ public class User extends BaseEntity {
 
 	@Column(name = AppConstants.Columns.LAST_NAME, nullable = false, length = AppConstants.FieldLengths.NAME)
 	private String lastName;
+
+	@Column(name = AppConstants.Columns.USERNAME, nullable = false, length = AppConstants.FieldLengths.USERNAME)
+	private String username;
 
 	@Column(name = AppConstants.Columns.EMAIL, nullable = false, length = AppConstants.FieldLengths.EMAIL)
 	private String email;
@@ -76,6 +81,14 @@ public class User extends BaseEntity {
 
 	public void setLastName(String lastName) {
 		this.lastName = lastName;
+	}
+
+	public String getUsername() {
+		return username;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
 	}
 
 	public String getEmail() {

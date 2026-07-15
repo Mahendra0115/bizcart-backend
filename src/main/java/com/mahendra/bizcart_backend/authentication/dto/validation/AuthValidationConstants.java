@@ -12,6 +12,10 @@ public final class AuthValidationConstants {
 	public static final String REFRESH_TOKEN_REQUIRED = "Refresh token is required";
 	public static final String FIRST_NAME_REQUIRED = "First name is required";
 	public static final String LAST_NAME_REQUIRED = "Last name is required";
+	public static final String USERNAME_REQUIRED = "Username is required";
+	public static final String USERNAME_PATTERN_MESSAGE =
+			"Username must contain only letters, numbers, dots, underscores or hyphens";
+	public static final String USERNAME_PATTERN = "^[A-Za-z0-9._-]{3,50}$";
 	public static final String USER_TYPE_REQUIRED = "User type is required";
 	public static final String USER_TYPE_PUBLIC_REGISTRATION_NOT_ALLOWED =
 			"User type is not allowed for public registration";
