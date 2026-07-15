@@ -3,6 +3,7 @@ package com.mahendra.bizcart_backend.authentication.config;
 import com.mahendra.bizcart_backend.authentication.security.JwtAuthenticationFilter;
 import com.mahendra.bizcart_backend.authentication.security.RestAccessDeniedHandler;
 import com.mahendra.bizcart_backend.authentication.security.RestAuthenticationEntryPoint;
+import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -17,6 +18,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -37,6 +40,7 @@ public class SecurityConfig {
 	private static final String API_AUTH_VERIFY_EMAIL = API_AUTH_BASE + "/verify-email";
 	private static final String API_AUTH_CHANGE_PASSWORD = API_AUTH_BASE + "/change-password";
 	private static final String API_AUTH_ME = API_AUTH_BASE + "/me";
+	private static final String API_AUTH_CSRF = API_AUTH_BASE + "/csrf";
 	private static final String ACTUATOR_HEALTH = "/actuator/health/**";
 	private static final String API_ADMIN = "/api/v1/admin/**";
 	private static final String API_SELLER = "/api/v1/seller/**";
@@ -63,7 +67,13 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-		http.csrf(AbstractHttpConfigurer::disable)
+		CsrfTokenRequestAttributeHandler csrfTokenRequestAttributeHandler = new CsrfTokenRequestAttributeHandler();
+		CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+		csrfTokenRepository.setHeaderName(AppConstants.Auth.CSRF_HEADER);
+		http.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
+				.csrfTokenRequestHandler(csrfTokenRequestAttributeHandler)
+				.ignoringRequestMatchers(API_AUTH_REGISTER, API_AUTH_FORGOT_PASSWORD, API_AUTH_RESEND_VERIFICATION,
+						API_AUTH_RESET_PASSWORD, API_AUTH_VERIFY_EMAIL, ACTUATOR_HEALTH))
 			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.formLogin(AbstractHttpConfigurer::disable)
@@ -74,6 +84,7 @@ public class SecurityConfig {
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
 				.requestMatchers(ACTUATOR_HEALTH).permitAll()
+				.requestMatchers(HttpMethod.GET, API_AUTH_CSRF).permitAll()
 				.requestMatchers(HttpMethod.POST, API_AUTH_LOGIN, API_AUTH_REGISTER, API_AUTH_FORGOT_PASSWORD,
 						API_AUTH_RESEND_VERIFICATION, API_AUTH_REFRESH_TOKEN, API_AUTH_RESET_PASSWORD,
 						API_AUTH_VERIFY_EMAIL).permitAll()
