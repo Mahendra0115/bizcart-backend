@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
 import com.mahendra.bizcart_backend.user.entity.User;
+import com.mahendra.bizcart_backend.user.enums.UserType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +82,11 @@ public class JwtTokenProvider {
 
 	public Map<String, Object> extractClaims(String token) {
 		String[] tokenParts = splitToken(token);
+		validateHeader(decodeJson(tokenParts[0]));
 		verifySignature(tokenParts);
-		return decodeJson(tokenParts[1]);
+		Map<String, Object> claims = decodeJson(tokenParts[1]);
+		validateClaims(claims);
+		return claims;
 	}
 
 	public Long extractUserId(String token) {
@@ -137,9 +142,14 @@ public class JwtTokenProvider {
 		if (!StringUtils.hasText(token)) {
 			throw new IllegalArgumentException("JWT token is required");
 		}
-		String[] tokenParts = token.split("\\.");
+		String[] tokenParts = token.split("\\.", -1);
 		if (tokenParts.length != 3) {
 			throw new IllegalArgumentException("Invalid JWT format");
+		}
+		for (String tokenPart : tokenParts) {
+			if (!StringUtils.hasText(tokenPart)) {
+				throw new IllegalArgumentException("Invalid JWT format");
+			}
 		}
 		return tokenParts;
 	}
@@ -192,5 +202,77 @@ public class JwtTokenProvider {
 			return Instant.ofEpochSecond(number.longValue());
 		}
 		return Instant.ofEpochSecond(Long.parseLong(String.valueOf(expiresAt)));
+	}
+
+	private void validateHeader(Map<String, Object> header) {
+		if (!ALGORITHM.equals(header.get(HEADER_ALGORITHM)) || !TOKEN_TYPE.equals(header.get(HEADER_TYPE))) {
+			throw new IllegalArgumentException("Unsupported JWT header");
+		}
+	}
+
+	private void validateClaims(Map<String, Object> claims) {
+		Long userId = parseRequiredPositiveLong(claims, CLAIM_SUBJECT);
+		String email = parseRequiredText(claims, CLAIM_EMAIL);
+		String userType = parseRequiredText(claims, CLAIM_USER_TYPE);
+		long tokenVersion = parseRequiredLong(claims, CLAIM_TOKEN_VERSION);
+		Instant issuedAt = parseRequiredInstant(claims, CLAIM_ISSUED_AT);
+		Instant expiresAt = parseRequiredInstant(claims, CLAIM_EXPIRES_AT);
+		String jwtId = parseRequiredText(claims, CLAIM_JWT_ID);
+
+		if (userId <= 0 || !StringUtils.hasText(email) || !StringUtils.hasText(jwtId) || tokenVersion < 0) {
+			throw new IllegalArgumentException("Invalid JWT claims");
+		}
+		try {
+			UserType.valueOf(userType);
+		}
+		catch (RuntimeException ex) {
+			throw new IllegalArgumentException("Invalid JWT user type", ex);
+		}
+		validateRoles(claims.get(CLAIM_ROLES));
+		if (!expiresAt.isAfter(issuedAt)) {
+			throw new IllegalArgumentException("JWT expiry must be after issued-at");
+		}
+	}
+
+	private void validateRoles(Object roles) {
+		if (!(roles instanceof Collection<?> roleCollection)) {
+			throw new IllegalArgumentException("JWT roles claim must be an array");
+		}
+		for (Object role : roleCollection) {
+			if (!(role instanceof String roleName) || !StringUtils.hasText(roleName)) {
+				throw new IllegalArgumentException("JWT roles claim contains an invalid value");
+			}
+		}
+	}
+
+	private Long parseRequiredPositiveLong(Map<String, Object> claims, String claimName) {
+		long value = parseRequiredLong(claims, claimName);
+		if (value <= 0) {
+			throw new IllegalArgumentException("JWT numeric claim must be positive");
+		}
+		return value;
+	}
+
+	private long parseRequiredLong(Map<String, Object> claims, String claimName) {
+		Object value = claims.get(claimName);
+		if (value instanceof Number number) {
+			return number.longValue();
+		}
+		if (value instanceof String text && StringUtils.hasText(text)) {
+			return Long.parseLong(text);
+		}
+		throw new IllegalArgumentException("JWT numeric claim is required");
+	}
+
+	private Instant parseRequiredInstant(Map<String, Object> claims, String claimName) {
+		return Instant.ofEpochSecond(parseRequiredLong(claims, claimName));
+	}
+
+	private String parseRequiredText(Map<String, Object> claims, String claimName) {
+		Object value = claims.get(claimName);
+		if (value instanceof String text && StringUtils.hasText(text)) {
+			return text;
+		}
+		throw new IllegalArgumentException("JWT text claim is required");
 	}
 }

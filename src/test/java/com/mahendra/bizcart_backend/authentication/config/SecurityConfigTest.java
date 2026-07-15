@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.mahendra.bizcart_backend.authentication.security.AuthenticatedUserDetails;
+import com.mahendra.bizcart_backend.authentication.security.CustomUserDetailsService;
 import com.mahendra.bizcart_backend.authentication.security.JwtAuthenticationFilter;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.security.RestAccessDeniedHandler;
@@ -17,7 +19,9 @@ import com.mahendra.bizcart_backend.user.enums.UserType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -26,8 +30,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -60,9 +67,24 @@ class SecurityConfigTest {
 	@Autowired
 	private JwtTokenProvider jwtTokenProvider;
 
+	@Autowired
+	private TestUserDetailsService testUserDetailsService;
+
+	@BeforeEach
+	void setUp() {
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER, AccountStatus.ACTIVE,
+				true, 1L), List.of("ROLE_CUSTOMER", "ORDER_READ"));
+	}
+
 	@Test
 	void publicAuthEndpointDoesNotRequireToken() throws Exception {
 		mockMvc.perform(post("/api/v1/auth/login"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void refreshTokenEndpointDoesNotRequireAccessToken() throws Exception {
+		mockMvc.perform(post("/api/v1/auth/refresh-token"))
 			.andExpect(status().isOk());
 	}
 
@@ -79,14 +101,47 @@ class SecurityConfigTest {
 	}
 
 	@Test
+	void protectedEndpointRejectsStaleTokenVersion() throws Exception {
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER, AccountStatus.ACTIVE,
+				true, 2L), List.of("ROLE_CUSTOMER"));
+
+		mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void protectedEndpointRejectsInactivePendingBlockedOrUnverifiedUsers() throws Exception {
+		assertProtectedEndpointRejects(AccountStatus.INACTIVE, true);
+		assertProtectedEndpointRejects(AccountStatus.PENDING, true);
+		assertProtectedEndpointRejects(AccountStatus.BLOCKED, true);
+		assertProtectedEndpointRejects(AccountStatus.ACTIVE, false);
+	}
+
+	@Test
 	void adminEndpointRequiresAdminRole() throws Exception {
 		mockMvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
 			.andExpect(status().isForbidden());
 
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER, AccountStatus.ACTIVE,
+				true, 1L), List.of("ROLE_ADMIN"));
 		mockMvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("ADMIN")))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void permissionEndpointUsesCurrentDatabaseAuthorities() throws Exception {
+		mockMvc.perform(get("/api/v1/customer/orders")
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
+			.andExpect(status().isOk());
+
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER, AccountStatus.ACTIVE,
+				true, 1L), List.of("ROLE_CUSTOMER"));
+
+		mockMvc.perform(get("/api/v1/customer/orders")
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
+			.andExpect(status().isForbidden());
 	}
 
 	@Test
@@ -106,18 +161,32 @@ class SecurityConfigTest {
 			.andExpect(result -> assertThat(result.getRequest().getSession(false)).isNull());
 	}
 
+	private void assertProtectedEndpointRejects(AccountStatus accountStatus, boolean emailVerified) throws Exception {
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER, accountStatus,
+				emailVerified, 1L), List.of("ROLE_CUSTOMER"));
+
+		mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
+			.andExpect(status().isUnauthorized());
+	}
+
 	private String token(String role) {
+		return jwtTokenProvider.generateAccessToken(
+				user(101L, "security@example.com", UserType.CUSTOMER, AccountStatus.ACTIVE, true, 1L), List.of(role));
+	}
+
+	private User user(Long id, String email, UserType userType, AccountStatus status, boolean emailVerified,
+			long tokenVersion) {
 		User user = new User();
-		ReflectionTestUtils.setField(user, "id", 101L);
+		ReflectionTestUtils.setField(user, "id", id);
 		user.setFirstName("Security");
 		user.setLastName("User");
-		user.setEmail("security@example.com");
+		user.setEmail(email);
 		user.setPassword("$2a$12$encodedPasswordPlaceholder");
-		user.setUserType(UserType.CUSTOMER);
-		user.setStatus(AccountStatus.ACTIVE);
-		user.setEmailVerified(true);
-		user.setTokenVersion(1L);
-		return jwtTokenProvider.generateAccessToken(user, List.of(role));
+		user.setUserType(userType);
+		user.setStatus(status);
+		user.setEmailVerified(emailVerified);
+		user.setTokenVersion(tokenVersion);
+		return user;
 	}
 
 	static class TestSecurityBeans {
@@ -130,6 +199,33 @@ class SecurityConfigTest {
 		@Bean
 		PasswordEncoder passwordEncoder() {
 			return NoOpPasswordEncoder.getInstance();
+		}
+
+		@Bean
+		TestUserDetailsService testUserDetailsService() {
+			return new TestUserDetailsService();
+		}
+	}
+
+	static class TestUserDetailsService extends CustomUserDetailsService {
+
+		private AuthenticatedUserDetails currentUser;
+
+		TestUserDetailsService() {
+			super(null, null, null);
+		}
+
+		void setCurrentUser(User user, Collection<String> authorities) {
+			this.currentUser = new AuthenticatedUserDetails(user,
+					authorities.stream().map(SimpleGrantedAuthority::new).toList());
+		}
+
+		@Override
+		public UserDetails loadUserByUsername(String email) {
+			if (currentUser != null && currentUser.getUsername().equals(email)) {
+				return currentUser;
+			}
+			throw new UsernameNotFoundException("User not found");
 		}
 	}
 

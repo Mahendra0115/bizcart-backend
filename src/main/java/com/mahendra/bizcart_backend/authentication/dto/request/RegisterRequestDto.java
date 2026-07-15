@@ -105,4 +105,10 @@ public class RegisterRequestDto {
 		}
 		return password.equals(confirmPassword);
 	}
+
+	@JsonIgnore
+	@AssertTrue(message = AuthValidationConstants.USER_TYPE_PUBLIC_REGISTRATION_NOT_ALLOWED)
+	public boolean isAllowedPublicRegistrationUserType() {
+		return userType == null || userType == UserType.CUSTOMER || userType == UserType.SELLER;
+	}
 }

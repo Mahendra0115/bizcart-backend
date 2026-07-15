@@ -5,9 +5,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.List;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -21,9 +21,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	private static final String BEARER_PREFIX = "Bearer ";
 
 	private final JwtTokenProvider jwtTokenProvider;
+	private final CustomUserDetailsService customUserDetailsService;
 
-	public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+	public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, CustomUserDetailsService customUserDetailsService) {
 		this.jwtTokenProvider = jwtTokenProvider;
+		this.customUserDetailsService = customUserDetailsService;
 	}
 
 	@Override
@@ -32,10 +34,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		String token = extractBearerToken(request);
 		if (token != null && jwtTokenProvider.validateToken(token)
 				&& SecurityContextHolder.getContext().getAuthentication() == null) {
-			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-					jwtTokenProvider.extractEmail(token), null, authorities(token));
-			authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-			SecurityContextHolder.getContext().setAuthentication(authentication);
+			authenticateRequest(request, token);
 		}
 		filterChain.doFilter(request, response);
 	}
@@ -48,10 +47,35 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		return authorizationHeader.substring(BEARER_PREFIX.length());
 	}
 
-	private List<SimpleGrantedAuthority> authorities(String token) {
-		return jwtTokenProvider.extractRoles(token).stream()
-			.map(CustomUserDetailsService::toRoleAuthority)
-			.map(SimpleGrantedAuthority::new)
-			.toList();
+	private void authenticateRequest(HttpServletRequest request, String token) {
+		try {
+			AuthenticatedUserDetails userDetails = loadCurrentUser(token);
+			if (!isCurrentTokenValidForUser(token, userDetails)) {
+				return;
+			}
+			UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userDetails, null,
+					userDetails.getAuthorities());
+			authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+			SecurityContextHolder.getContext().setAuthentication(authentication);
+		}
+		catch (UsernameNotFoundException | IllegalArgumentException ex) {
+			SecurityContextHolder.clearContext();
+		}
+	}
+
+	private AuthenticatedUserDetails loadCurrentUser(String token) {
+		UserDetails userDetails = customUserDetailsService.loadUserByUsername(jwtTokenProvider.extractEmail(token));
+		if (!(userDetails instanceof AuthenticatedUserDetails authenticatedUserDetails)) {
+			throw new IllegalArgumentException("Unsupported authenticated principal");
+		}
+		return authenticatedUserDetails;
+	}
+
+	private boolean isCurrentTokenValidForUser(String token, AuthenticatedUserDetails userDetails) {
+		return userDetails.isEnabled()
+				&& userDetails.isAccountNonLocked()
+				&& userDetails.isEmailVerified()
+				&& userDetails.getId().equals(jwtTokenProvider.extractUserId(token))
+				&& userDetails.getTokenVersion() == jwtTokenProvider.extractTokenVersion(token);
 	}
 }

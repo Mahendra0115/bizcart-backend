@@ -1,107 +1,108 @@
-Backend project ke root me sabse pehle **`README.md`** rakho. Isme project ka overview, tech stack, setup aur run steps honge.
-
-````markdown
 # BizCart Backend
 
-Backend API for BizCart – Small Business Commerce Platform.
+BizCart Backend is a Spring Boot modular monolith for the BizCart small-business commerce platform.
+
+The current backend includes the foundation for the Authentication module, shared user/RBAC entities, repository interfaces, DTO validation, JWT utility support, and Spring Security configuration.
 
 ## Tech Stack
 
 - Java 21
 - Spring Boot 3.5.x
+- Spring Web
 - Spring Data JPA
 - Spring Security
-- MySQL
+- Jakarta Validation
 - Flyway
-- Swagger/OpenAPI
-- Docker
+- MySQL
 - Maven
 
-## Project Structure
+## Prerequisites
 
-```text
-src/main/java/com/bizcart/
-├── auth/
-├── user/
-├── category/
-├── product/
-├── inventory/
-├── cart/
-├── order/
-├── common/
-└── config/
-````
+- JDK 21
+- MySQL 8.x
+- Maven Wrapper from this repository
 
-## Environments
+## Environment Profiles
 
-* `local` – Local development
-* `dev` – Hosted development environment
+- `local`: local development profile
+- `dev`: hosted development profile
 
-## Run Locally
+The application reads JWT settings from the `bizcart.auth` configuration namespace. Set a 256-bit minimum JWT secret before running the application.
+
+Example:
+
+```bash
+export BIZCART_AUTH_JWT_SECRET="replace-with-a-strong-32-byte-minimum-secret"
+```
+
+## Local Setup
+
+1. Create a local MySQL database for BizCart.
+2. Configure datasource values through the active profile configuration or environment variables.
+3. Start the application with the local profile:
 
 ```bash
 SPRING_PROFILES_ACTIVE=local ./mvnw spring-boot:run
 ```
 
-## Run with Dev Profile
-
-```bash
-SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
-```
-
-## Build Project
-
-```bash
-./mvnw clean install
-```
-
-## Local URLs
+Default local URL:
 
 ```text
-Backend: http://localhost:8080
-Swagger: http://localhost:8080/swagger-ui/index.html
+http://localhost:8080
 ```
 
-## Branch Strategy
+## Build And Test
+
+Compile:
+
+```bash
+./mvnw -q -DskipTests compile
+```
+
+Run tests:
+
+```bash
+./mvnw -q test
+```
+
+Run all Maven verification steps:
+
+```bash
+./mvnw clean verify
+```
+
+## Project Structure
 
 ```text
-main
-develop
-feature/*
-fix/*
+src/main/java/com/mahendra/bizcart_backend/
+├── BizcartBackendApplication.java
+├── authentication/
+│   ├── config/
+│   ├── dto/
+│   ├── entity/
+│   ├── repository/
+│   └── security/
+├── common/
+│   ├── constants/
+│   └── entity/
+└── user/
+    ├── entity/
+    ├── enums/
+    └── repository/
+```
+
+```text
+src/main/resources/
+├── application.yml
+├── application-local.yml
+├── application-dev.yml
+└── db/migration/
 ```
 
 ## Documentation
 
-Detailed documentation is maintained in the separate repository:
+Detailed product requirements and technical approach documents are maintained separately in the BizCart project vault:
 
 ```text
 bizcart-project-vault
 ```
-
-It contains:
-
-* Project requirements
-* Technical approach
-* ER diagram
-* API documentation
-* QA checklists
-* Environment setup
-* Release notes
-
-````
-
-Backend root me initially ye files enough hain:
-
-```text
-bizcart-backend/
-├── README.md
-├── .gitignore
-├── pom.xml
-├── mvnw
-├── mvnw.cmd
-├── .mvn/
-└── src/
-````
-
-Detailed requirements, approach aur QA files backend repository me duplicate mat karo; unhe `bizcart-project-vault` me manage karo.

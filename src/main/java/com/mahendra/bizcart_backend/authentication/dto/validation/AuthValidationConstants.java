@@ -13,6 +13,8 @@ public final class AuthValidationConstants {
 	public static final String FIRST_NAME_REQUIRED = "First name is required";
 	public static final String LAST_NAME_REQUIRED = "Last name is required";
 	public static final String USER_TYPE_REQUIRED = "User type is required";
+	public static final String USER_TYPE_PUBLIC_REGISTRATION_NOT_ALLOWED =
+			"User type is not allowed for public registration";
 	public static final String PASSWORD_MISMATCH = "Password and confirmation password must match";
 	public static final String NEW_PASSWORD_MISMATCH = "New password and confirmation password must match";
 	public static final String PASSWORD_PATTERN_MESSAGE =

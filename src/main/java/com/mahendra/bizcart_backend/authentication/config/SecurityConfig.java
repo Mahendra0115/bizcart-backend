@@ -75,8 +75,9 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
 				.requestMatchers(ACTUATOR_HEALTH).permitAll()
 				.requestMatchers(HttpMethod.POST, API_AUTH_LOGIN, API_AUTH_REGISTER, API_AUTH_FORGOT_PASSWORD,
-						API_AUTH_RESEND_VERIFICATION, API_AUTH_RESET_PASSWORD, API_AUTH_VERIFY_EMAIL).permitAll()
-				.requestMatchers(HttpMethod.POST, API_AUTH_REFRESH_TOKEN, API_AUTH_LOGOUT).authenticated()
+						API_AUTH_RESEND_VERIFICATION, API_AUTH_REFRESH_TOKEN, API_AUTH_RESET_PASSWORD,
+						API_AUTH_VERIFY_EMAIL).permitAll()
+				.requestMatchers(HttpMethod.POST, API_AUTH_LOGOUT).authenticated()
 				.requestMatchers(HttpMethod.POST, API_AUTH_LOGOUT_ALL).authenticated()
 				.requestMatchers(HttpMethod.PUT, API_AUTH_CHANGE_PASSWORD).authenticated()
 				.requestMatchers(HttpMethod.GET, API_AUTH_ME).authenticated()
