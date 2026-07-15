@@ -33,6 +33,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -74,6 +75,47 @@ class AuthControllerTest {
 			.andExpect(jsonPath("$.data.username").value("customer-one"))
 			.andExpect(jsonPath("$.data.email").value("customer@example.com"))
 			.andExpect(jsonPath("$.data.password").doesNotExist());
+	}
+
+	@Test
+	void registerMapsDuplicateEmailDatabaseRaceToConflictResponse() throws Exception {
+		when(authService.register(any(RegisterRequestDto.class)))
+			.thenThrow(new DataIntegrityViolationException("Duplicate entry for key 'ux_users_email'"));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REGISTER_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(registerRequest())))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_EMAIL_ALREADY_EXISTS))
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.DUPLICATE_EMAIL))
+			.andExpect(jsonPath("$.path").value(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REGISTER_PATH));
+	}
+
+	@Test
+	void registerMapsDuplicateUsernameDatabaseRaceToConflictResponse() throws Exception {
+		when(authService.register(any(RegisterRequestDto.class)))
+			.thenThrow(new DataIntegrityViolationException("Duplicate entry for key 'ux_users_username'"));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REGISTER_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(registerRequest())))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_USERNAME_ALREADY_EXISTS))
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.DUPLICATE_USERNAME));
+	}
+
+	@Test
+	void validationErrorsUseStandardErrorResponse() throws Exception {
+		RegisterRequestDto request = registerRequest();
+		request.setEmail("not-an-email");
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REGISTER_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VALIDATION_FAILED))
+			.andExpect(jsonPath("$.fieldErrors[0].field").value("email"));
 	}
 
 	@Test

@@ -168,12 +168,25 @@ public final class AppConstants {
 		public static final String ACCOUNT_NOT_ACTIVE = "Account is not active";
 		public static final String EMAIL_NOT_VERIFIED = "Email is not verified";
 		public static final String SELLER_NOT_APPROVED = "Seller account is not approved";
+		public static final String VALIDATION_FAILED = "Request validation failed";
+		public static final String INTERNAL_ERROR = "Internal server error";
 		public static final String DEFAULT_ROLE_DESCRIPTION = "Default customer role";
 		public static final String REFRESH_TOKEN_COOKIE = "BIZCART_REFRESH_TOKEN";
 		public static final String SAME_SITE_LAX = "Lax";
 		public static final String HMAC_SHA_256 = "HmacSHA256";
 		public static final String CSRF_HEADER = "X-XSRF-TOKEN";
 		public static final String CORS_ALLOWED_HEADERS = "Authorization,Content-Type," + CSRF_HEADER;
+		public static final String AUTH_VALIDATION_FAILED = "AUTH_VALIDATION_FAILED";
+		public static final String AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS";
+		public static final String AUTH_INVALID_TOKEN = "AUTH_INVALID_TOKEN";
+		public static final String AUTH_ACCESS_DENIED = "AUTH_ACCESS_DENIED";
+		public static final String AUTH_ACCOUNT_INACTIVE = "AUTH_ACCOUNT_INACTIVE";
+		public static final String AUTH_EMAIL_NOT_VERIFIED = "AUTH_EMAIL_NOT_VERIFIED";
+		public static final String AUTH_SELLER_NOT_APPROVED = "AUTH_SELLER_NOT_APPROVED";
+		public static final String AUTH_EMAIL_ALREADY_EXISTS = "AUTH_EMAIL_ALREADY_EXISTS";
+		public static final String AUTH_USERNAME_ALREADY_EXISTS = "AUTH_USERNAME_ALREADY_EXISTS";
+		public static final String AUTH_CONFLICT = "AUTH_CONFLICT";
+		public static final String AUTH_INTERNAL_ERROR = "AUTH_INTERNAL_ERROR";
 
 		private Auth() {
 		}

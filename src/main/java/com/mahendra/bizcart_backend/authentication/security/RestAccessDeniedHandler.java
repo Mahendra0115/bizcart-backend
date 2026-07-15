@@ -1,11 +1,11 @@
 package com.mahendra.bizcart_backend.authentication.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mahendra.bizcart_backend.common.constants.AppConstants;
+import com.mahendra.bizcart_backend.common.exception.ApiErrorResponseFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.Instant;
-import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
 
-	private static final String ERROR_CODE = "AUTH_ACCESS_DENIED";
 	private static final String ERROR_MESSAGE = "Access is denied";
 
 	private final ObjectMapper objectMapper;
@@ -29,12 +28,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
 			AccessDeniedException accessDeniedException) throws IOException {
 		response.setStatus(HttpStatus.FORBIDDEN.value());
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		objectMapper.writeValue(response.getOutputStream(), Map.of(
-				"timestamp", Instant.now().toString(),
-				"status", HttpStatus.FORBIDDEN.value(),
-				"error", HttpStatus.FORBIDDEN.getReasonPhrase(),
-				"code", ERROR_CODE,
-				"message", ERROR_MESSAGE,
-				"path", request.getRequestURI()));
+		objectMapper.writeValue(response.getOutputStream(), ApiErrorResponseFactory.of(HttpStatus.FORBIDDEN,
+				AppConstants.Auth.AUTH_ACCESS_DENIED, ERROR_MESSAGE, request.getRequestURI()));
 	}
 }
