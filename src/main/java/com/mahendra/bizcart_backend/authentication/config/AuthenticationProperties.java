@@ -12,6 +12,8 @@ public class AuthenticationProperties {
 	private final Jwt jwt = new Jwt();
 	private final Password password = new Password();
 	private final Cors cors = new Cors();
+	private final TokenHash tokenHash = new TokenHash();
+	private final RefreshCookie refreshCookie = new RefreshCookie();
 
 	public Jwt getJwt() {
 		return jwt;
@@ -23,6 +25,14 @@ public class AuthenticationProperties {
 
 	public Cors getCors() {
 		return cors;
+	}
+
+	public TokenHash getTokenHash() {
+		return tokenHash;
+	}
+
+	public RefreshCookie getRefreshCookie() {
+		return refreshCookie;
 	}
 
 	public static class Jwt {
@@ -115,6 +125,66 @@ public class AuthenticationProperties {
 
 		public void setAllowCredentials(boolean allowCredentials) {
 			this.allowCredentials = allowCredentials;
+		}
+	}
+
+	public static class TokenHash {
+
+		@NotBlank
+		private String secret;
+
+		public String getSecret() {
+			return secret;
+		}
+
+		public void setSecret(String secret) {
+			this.secret = secret;
+		}
+	}
+
+	public static class RefreshCookie {
+
+		@NotBlank
+		private String name = "BIZCART_REFRESH_TOKEN";
+
+		@NotBlank
+		private String path = "/api/v1/auth";
+
+		@NotBlank
+		private String sameSite = "Lax";
+
+		private boolean secure;
+
+		public String getName() {
+			return name;
+		}
+
+		public void setName(String name) {
+			this.name = name;
+		}
+
+		public String getPath() {
+			return path;
+		}
+
+		public void setPath(String path) {
+			this.path = path;
+		}
+
+		public String getSameSite() {
+			return sameSite;
+		}
+
+		public void setSameSite(String sameSite) {
+			this.sameSite = sameSite;
+		}
+
+		public boolean isSecure() {
+			return secure;
+		}
+
+		public void setSecure(boolean secure) {
+			this.secure = secure;
 		}
 	}
 }

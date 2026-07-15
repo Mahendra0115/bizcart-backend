@@ -137,4 +137,36 @@ public final class AppConstants {
 		private FieldLengths() {
 		}
 	}
+
+	public static final class RoleNames {
+
+		public static final String ADMIN = "ADMIN";
+		public static final String SELLER = "SELLER";
+		public static final String CUSTOMER = "CUSTOMER";
+
+		private RoleNames() {
+		}
+	}
+
+	public static final class Auth {
+
+		public static final String API_AUTH_BASE = "/api/v1/auth";
+		public static final String REFRESH_TOKEN_PATH = "/refresh-token";
+		public static final String LOGOUT_PATH = "/logout";
+		public static final String LOGOUT_ALL_PATH = "/logout-all";
+		public static final String REFRESH_TOKEN_SUCCESS = "Token refreshed successfully";
+		public static final String LOGOUT_SUCCESS = "Logout successful";
+		public static final String LOGOUT_ALL_SUCCESS = "Logged out from all devices successfully";
+		public static final String INVALID_REFRESH_TOKEN = "Invalid refresh token";
+		public static final String REFRESH_TOKEN_EXPIRED = "Refresh token expired";
+		public static final String REFRESH_TOKEN_REVOKED = "Refresh token revoked";
+		public static final String ACCOUNT_NOT_ACTIVE = "Account is not active";
+		public static final String EMAIL_NOT_VERIFIED = "Email is not verified";
+		public static final String SELLER_NOT_APPROVED = "Seller account is not approved";
+		public static final String REFRESH_TOKEN_COOKIE = "BIZCART_REFRESH_TOKEN";
+		public static final String HMAC_SHA_256 = "HmacSHA256";
+
+		private Auth() {
+		}
+	}
 }

@@ -13,3 +13,5 @@ bizcart:
   auth:
     jwt:
       secret: test-only-0123456789abcdef0123456789abcdef
+    token-hash:
+      secret: test-token-hash-0123456789abcdef0123456789abcdef

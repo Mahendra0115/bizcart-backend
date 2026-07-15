@@ -35,6 +35,7 @@ import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,6 +50,7 @@ import org.springframework.test.web.servlet.MockMvc;
 		SecurityConfigTest.TestSecurityBeans.class
 })
 @EnableConfigurationProperties(AuthenticationProperties.class)
+@ActiveProfiles("security-test")
 @TestPropertySource(properties = {
 		"bizcart.auth.jwt.secret=0123456789abcdef0123456789abcdef",
 		"bizcart.auth.jwt.access-token-expiry-seconds=900",
