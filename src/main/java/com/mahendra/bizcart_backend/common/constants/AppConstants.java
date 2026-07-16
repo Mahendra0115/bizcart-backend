@@ -188,6 +188,8 @@ public final class AppConstants {
 		public static final String AUTH_VALIDATION_FAILED = "AUTH_VALIDATION_FAILED";
 		public static final String AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS";
 		public static final String AUTH_INVALID_TOKEN = "AUTH_INVALID_TOKEN";
+		public static final String AUTH_REFRESH_TOKEN_EXPIRED = "AUTH_REFRESH_TOKEN_EXPIRED";
+		public static final String AUTH_REFRESH_TOKEN_REVOKED = "AUTH_REFRESH_TOKEN_REVOKED";
 		public static final String AUTH_ACCESS_DENIED = "AUTH_ACCESS_DENIED";
 		public static final String AUTH_ACCOUNT_INACTIVE = "AUTH_ACCOUNT_INACTIVE";
 		public static final String AUTH_EMAIL_NOT_VERIFIED = "AUTH_EMAIL_NOT_VERIFIED";

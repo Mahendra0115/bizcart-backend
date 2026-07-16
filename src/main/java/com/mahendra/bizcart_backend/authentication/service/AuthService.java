@@ -52,6 +52,7 @@ public class AuthService {
 	private final PermissionRepository permissionRepository;
 	private final UserRoleRepository userRoleRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
+	private final RefreshTokenRevocationService refreshTokenRevocationService;
 	private final LoginAttemptRecorder loginAttemptRecorder;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
@@ -61,14 +62,15 @@ public class AuthService {
 
 	public AuthService(UserRepository userRepository, RoleRepository roleRepository,
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
-			RefreshTokenRepository refreshTokenRepository, LoginAttemptRecorder loginAttemptRecorder,
-			PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
+			RefreshTokenRepository refreshTokenRepository, RefreshTokenRevocationService refreshTokenRevocationService,
+			LoginAttemptRecorder loginAttemptRecorder, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
 			AuthenticationProperties authenticationProperties, Clock clock) {
 		this.userRepository = userRepository;
 		this.roleRepository = roleRepository;
 		this.permissionRepository = permissionRepository;
 		this.userRoleRepository = userRoleRepository;
 		this.refreshTokenRepository = refreshTokenRepository;
+		this.refreshTokenRevocationService = refreshTokenRevocationService;
 		this.loginAttemptRecorder = loginAttemptRecorder;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtTokenProvider = jwtTokenProvider;
@@ -152,14 +154,14 @@ public class AuthService {
 	}
 
 	@Transactional
-	public void logout(String rawRefreshToken) {
+	public void logout(Long userId, String rawRefreshToken) {
+		if (!StringUtils.hasText(rawRefreshToken)) {
+			return;
+		}
 		String tokenHash = hashToken(rawRefreshToken);
 		LocalDateTime now = LocalDateTime.now(clock);
-		int revokedTokens = refreshTokenRepository.revokeActiveTokenByHash(tokenHash, now,
+		refreshTokenRepository.revokeActiveTokenByUserIdAndHash(userId, tokenHash, now,
 				RefreshTokenRevocationReason.LOGOUT, now);
-		if (revokedTokens == 0) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_REFRESH_TOKEN);
-		}
 	}
 
 	@Transactional
@@ -231,8 +233,8 @@ public class AuthService {
 
 	private void validateRefreshToken(RefreshToken refreshToken, LocalDateTime now) {
 		if (refreshToken.getRevokedAt() != null) {
-			refreshTokenRepository.revokeActiveTokensByFamilyId(refreshToken.getTokenFamilyId(), now,
-					RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED, now);
+			refreshTokenRevocationService.revokeActiveFamilyTokens(refreshToken.getTokenFamilyId(), now,
+					RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_REVOKED);
 		}
 		if (!refreshToken.getExpiresAt().isAfter(now)) {

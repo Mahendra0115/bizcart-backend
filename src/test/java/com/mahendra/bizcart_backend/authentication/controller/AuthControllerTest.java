@@ -43,6 +43,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -179,15 +181,76 @@ class AuthControllerTest {
 	}
 
 	@Test
-	void logoutRevokesRefreshTokenAndClearsCookie() throws Exception {
-		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.LOGOUT_PATH)
-				.cookie(new Cookie(AppConstants.Auth.REFRESH_TOKEN_COOKIE, "raw-refresh")))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.message").value(AppConstants.Auth.LOGOUT_SUCCESS))
-			.andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse()
-				.getHeader(HttpHeaders.SET_COOKIE)).contains("BIZCART_REFRESH_TOKEN=").contains("Max-Age=0"));
+	void refreshAccessTokenExpiredUsesSpecificErrorCode() throws Exception {
+		when(authService.refreshAccessToken(eq("expired-refresh"), any(), any()))
+			.thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_EXPIRED));
 
-		verify(authService).logout("raw-refresh");
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REFRESH_TOKEN_PATH)
+				.cookie(new Cookie(AppConstants.Auth.REFRESH_TOKEN_COOKIE, "expired-refresh")))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_REFRESH_TOKEN_EXPIRED));
+	}
+
+	@Test
+	void refreshAccessTokenRevokedUsesSpecificErrorCode() throws Exception {
+		when(authService.refreshAccessToken(eq("revoked-refresh"), any(), any()))
+			.thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_REVOKED));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REFRESH_TOKEN_PATH)
+				.cookie(new Cookie(AppConstants.Auth.REFRESH_TOKEN_COOKIE, "revoked-refresh")))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_REFRESH_TOKEN_REVOKED));
+	}
+
+	@Test
+	void refreshAccessTokenInvalidUsesInvalidTokenErrorCode() throws Exception {
+		when(authService.refreshAccessToken(eq("invalid-refresh"), any(), any()))
+			.thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_REFRESH_TOKEN));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.REFRESH_TOKEN_PATH)
+				.cookie(new Cookie(AppConstants.Auth.REFRESH_TOKEN_COOKIE, "invalid-refresh")))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_INVALID_TOKEN));
+	}
+
+	@Test
+	void logoutRevokesRefreshTokenAndClearsCookie() throws Exception {
+		AuthenticatedUserDetails principal = new AuthenticatedUserDetails(user(), List.of());
+		SecurityContextHolder.getContext()
+			.setAuthentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+
+		try {
+			mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.LOGOUT_PATH)
+					.cookie(new Cookie(AppConstants.Auth.REFRESH_TOKEN_COOKIE, "raw-refresh")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value(AppConstants.Auth.LOGOUT_SUCCESS))
+				.andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse()
+					.getHeader(HttpHeaders.SET_COOKIE)).contains("BIZCART_REFRESH_TOKEN=").contains("Max-Age=0"));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		verify(authService).logout(55L, "raw-refresh");
+	}
+
+	@Test
+	void logoutWithoutRefreshTokenStillClearsCookie() throws Exception {
+		AuthenticatedUserDetails principal = new AuthenticatedUserDetails(user(), List.of());
+		SecurityContextHolder.getContext()
+			.setAuthentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+
+		try {
+			mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.LOGOUT_PATH))
+				.andExpect(status().isOk())
+				.andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse()
+					.getHeader(HttpHeaders.SET_COOKIE)).contains("BIZCART_REFRESH_TOKEN=").contains("Max-Age=0"));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		verify(authService).logout(55L, null);
 	}
 
 	@Test

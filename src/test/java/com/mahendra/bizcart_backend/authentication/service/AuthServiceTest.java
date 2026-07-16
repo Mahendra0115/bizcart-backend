@@ -66,6 +66,9 @@ class AuthServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Mock
+	private RefreshTokenRevocationService refreshTokenRevocationService;
+
+	@Mock
 	private LoginAttemptRecorder loginAttemptRecorder;
 
 	@Mock
@@ -83,8 +86,8 @@ class AuthServiceTest {
 		authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
 		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
 		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
-				refreshTokenRepository, loginAttemptRecorder, passwordEncoder, jwtTokenProvider, authenticationProperties,
-				Clock.fixed(NOW, ZoneOffset.UTC));
+				refreshTokenRepository, refreshTokenRevocationService, loginAttemptRecorder, passwordEncoder,
+				jwtTokenProvider, authenticationProperties, Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -265,29 +268,39 @@ class AuthServiceTest {
 			.isInstanceOf(ResponseStatusException.class)
 			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_REVOKED);
 
-		verify(refreshTokenRepository).revokeActiveTokensByFamilyId(eq("family-1"), any(LocalDateTime.class),
-				eq(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED), any(LocalDateTime.class));
+		verify(refreshTokenRevocationService).revokeActiveFamilyTokens(eq("family-1"), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED));
 	}
 
 	@Test
 	void logoutRevokesActiveRefreshToken() {
-		when(refreshTokenRepository.revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
-				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class))).thenReturn(1);
+		authService.logout(55L, "raw-refresh");
 
-		authService.logout("raw-refresh");
-
-		verify(refreshTokenRepository).revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
-				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(55L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
 	}
 
 	@Test
-	void logoutRejectsInvalidOrAlreadyRevokedRefreshToken() {
-		when(refreshTokenRepository.revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
-				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class))).thenReturn(0);
+	void logoutIgnoresInvalidOrAlreadyRevokedRefreshToken() {
+		authService.logout(55L, "raw-refresh");
 
-		assertThatThrownBy(() -> authService.logout("raw-refresh"))
-			.isInstanceOf(ResponseStatusException.class)
-			.hasMessageContaining(AppConstants.Auth.INVALID_REFRESH_TOKEN);
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(55L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
+	}
+
+	@Test
+	void logoutIgnoresMissingRefreshToken() {
+		authService.logout(55L, null);
+
+		verify(refreshTokenRepository, never()).revokeActiveTokenByUserIdAndHash(any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void logoutUsesAuthenticatedUserOwnershipWhenRevokingRefreshToken() {
+		authService.logout(99L, "raw-refresh");
+
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(99L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
 	}
 
 	@Test

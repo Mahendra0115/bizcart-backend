@@ -83,8 +83,10 @@ public class AuthController {
 	}
 
 	@PostMapping(AppConstants.Auth.LOGOUT_PATH)
-	public AuthResponseDto<MessageResponseDto> logout(HttpServletRequest request, HttpServletResponse response) {
-		authService.logout(refreshToken(request));
+	public AuthResponseDto<MessageResponseDto> logout(
+			@AuthenticationPrincipal AuthenticatedUserDetails authenticatedUserDetails,
+			HttpServletRequest request, HttpServletResponse response) {
+		authService.logout(authenticatedUserDetails.getId(), refreshToken(request));
 		clearRefreshTokenCookie(response);
 		return new AuthResponseDto<>(AppConstants.Auth.LOGOUT_SUCCESS,
 				new MessageResponseDto(AppConstants.Auth.LOGOUT_SUCCESS));
