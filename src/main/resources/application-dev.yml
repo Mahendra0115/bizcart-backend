@@ -1,0 +1,22 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+bizcart:
+  auth:
+    jwt:
+      secret: ${BIZCART_AUTH_JWT_SECRET}
+    token-hash:
+      secret: ${BIZCART_AUTH_TOKEN_HASH_SECRET}
+    refresh-cookie:
+      secure: true

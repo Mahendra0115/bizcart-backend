@@ -1,5 +1,6 @@
 package com.mahendra.bizcart_backend.authentication.config;
 
+import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -91,7 +92,7 @@ public class AuthenticationProperties {
 
 		private String allowedMethods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
 
-		private String allowedHeaders = "Authorization,Content-Type,X-CSRF-TOKEN";
+		private String allowedHeaders = AppConstants.Auth.CORS_ALLOWED_HEADERS;
 
 		private boolean allowCredentials = true;
 

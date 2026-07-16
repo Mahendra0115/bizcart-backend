@@ -4,7 +4,6 @@ import com.mahendra.bizcart_backend.authentication.dto.validation.AuthValidation
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class LoginRequestDto {
@@ -15,9 +14,7 @@ public class LoginRequestDto {
 	private String email;
 
 	@NotBlank(message = AuthValidationConstants.PASSWORD_REQUIRED)
-	@Size(min = 8, max = 64)
-	@Pattern(regexp = AuthValidationConstants.PASSWORD_PATTERN,
-			message = AuthValidationConstants.PASSWORD_PATTERN_MESSAGE)
+	@Size(max = 64)
 	private String password;
 
 	public String getEmail() {

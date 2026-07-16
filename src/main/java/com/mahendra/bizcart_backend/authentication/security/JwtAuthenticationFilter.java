@@ -75,6 +75,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		return userDetails.isEnabled()
 				&& userDetails.isAccountNonLocked()
 				&& userDetails.isEmailVerified()
+				&& userDetails.isSellerApproved()
 				&& userDetails.getId().equals(jwtTokenProvider.extractUserId(token))
 				&& userDetails.getTokenVersion() == jwtTokenProvider.extractTokenVersion(token);
 	}

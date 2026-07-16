@@ -20,4 +20,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	Optional<User> findByNormalizedEmail(@Param(PARAM_EMAIL) String email);
 
 	boolean existsByEmail(String email);
+
+	boolean existsByUsername(String username);
 }

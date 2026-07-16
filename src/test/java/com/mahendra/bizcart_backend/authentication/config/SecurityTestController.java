@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Profile("security-test")
 @RestController
 @RequestMapping("/api/v1")
-@Profile("security-test")
 class SecurityTestController {
 
 	@PostMapping("/auth/login")
@@ -25,6 +25,11 @@ class SecurityTestController {
 
 	@GetMapping("/auth/me")
 	ResponseEntity<Void> currentUser() {
+		return ResponseEntity.ok().build();
+	}
+
+	@GetMapping("/auth/csrf")
+	ResponseEntity<Void> csrfToken() {
 		return ResponseEntity.ok().build();
 	}
 

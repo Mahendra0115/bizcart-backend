@@ -21,6 +21,12 @@ public class RegisterRequestDto {
 	@Size(max = AppConstants.FieldLengths.NAME)
 	private String lastName;
 
+	@NotBlank(message = AuthValidationConstants.USERNAME_REQUIRED)
+	@Size(min = 3, max = AppConstants.FieldLengths.USERNAME)
+	@Pattern(regexp = AuthValidationConstants.USERNAME_PATTERN,
+			message = AuthValidationConstants.USERNAME_PATTERN_MESSAGE)
+	private String username;
+
 	@NotBlank(message = AuthValidationConstants.EMAIL_REQUIRED)
 	@Email(message = AuthValidationConstants.EMAIL_INVALID)
 	@Size(max = AppConstants.FieldLengths.EMAIL)
@@ -55,6 +61,14 @@ public class RegisterRequestDto {
 
 	public void setLastName(String lastName) {
 		this.lastName = lastName;
+	}
+
+	public String getUsername() {
+		return username;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
 	}
 
 	public String getEmail() {

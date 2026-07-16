@@ -7,6 +7,7 @@ public record RegisterResponseDto(
 		Long id,
 		String firstName,
 		String lastName,
+		String username,
 		String email,
 		String phone,
 		UserType userType,

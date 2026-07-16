@@ -2,6 +2,7 @@ package com.mahendra.bizcart_backend.authentication.security;
 
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
+import com.mahendra.bizcart_backend.user.enums.UserType;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.security.core.GrantedAuthority;
@@ -12,8 +13,10 @@ public class AuthenticatedUserDetails implements UserDetails {
 	private final Long id;
 	private final String email;
 	private final String password;
+	private final UserType userType;
 	private final AccountStatus status;
 	private final boolean emailVerified;
+	private final boolean adminApproved;
 	private final long tokenVersion;
 	private final List<GrantedAuthority> authorities;
 
@@ -21,8 +24,10 @@ public class AuthenticatedUserDetails implements UserDetails {
 		this.id = user.getId();
 		this.email = user.getEmail();
 		this.password = user.getPassword();
+		this.userType = user.getUserType();
 		this.status = user.getStatus();
 		this.emailVerified = user.isEmailVerified();
+		this.adminApproved = user.isAdminApproved();
 		this.tokenVersion = user.getTokenVersion();
 		this.authorities = List.copyOf(authorities);
 	}
@@ -37,6 +42,10 @@ public class AuthenticatedUserDetails implements UserDetails {
 
 	public boolean isEmailVerified() {
 		return emailVerified;
+	}
+
+	public boolean isSellerApproved() {
+		return userType != UserType.SELLER || adminApproved;
 	}
 
 	public long getTokenVersion() {

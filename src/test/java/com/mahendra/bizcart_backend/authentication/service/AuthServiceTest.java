@@ -2,83 +2,253 @@ package com.mahendra.bizcart_backend.authentication.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
+import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
+import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
+import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
+import com.mahendra.bizcart_backend.user.entity.Permission;
 import com.mahendra.bizcart_backend.user.entity.Role;
 import com.mahendra.bizcart_backend.user.entity.User;
+import com.mahendra.bizcart_backend.user.entity.UserRole;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
+import com.mahendra.bizcart_backend.user.repository.PermissionRepository;
 import com.mahendra.bizcart_backend.user.repository.RoleRepository;
-import java.lang.reflect.Proxy;
-import java.nio.charset.StandardCharsets;
+import com.mahendra.bizcart_backend.user.repository.UserRepository;
+import com.mahendra.bizcart_backend.user.repository.UserRoleRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+@ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-	private static final Instant NOW = Instant.parse("2026-07-15T00:00:00Z");
-	private static final String HASH_SECRET = "test-token-hash-0123456789abcdef0123456789abcdef";
+	private static final Instant NOW = Instant.parse("2026-07-11T00:00:00Z");
 
-	private AuthenticationProperties authenticationProperties;
-	private FakeRefreshTokenRepository refreshTokenRepository;
+	@Mock
+	private UserRepository userRepository;
+
+	@Mock
+	private RoleRepository roleRepository;
+
+	@Mock
+	private PermissionRepository permissionRepository;
+
+	@Mock
+	private UserRoleRepository userRoleRepository;
+
+	@Mock
+	private RefreshTokenRepository refreshTokenRepository;
+
+	@Mock
+	private LoginAttemptRecorder loginAttemptRecorder;
+
+	@Mock
+	private PasswordEncoder passwordEncoder;
+
+	@Mock
+	private JwtTokenProvider jwtTokenProvider;
+
 	private AuthService authService;
 
 	@BeforeEach
 	void setUp() {
-		authenticationProperties = new AuthenticationProperties();
-		authenticationProperties.getJwt().setSecret("test-only-0123456789abcdef0123456789abcdef");
+		AuthenticationProperties authenticationProperties = new AuthenticationProperties();
 		authenticationProperties.getJwt().setAccessTokenExpirySeconds(900);
 		authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
-		authenticationProperties.getTokenHash().setSecret(HASH_SECRET);
-		refreshTokenRepository = new FakeRefreshTokenRepository();
-		RoleRepository roleRepository = roleRepository(List.of(role(AppConstants.RoleNames.CUSTOMER)));
-		JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(authenticationProperties, new ObjectMapper(),
+		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
+		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
+				refreshTokenRepository, loginAttemptRecorder, passwordEncoder, jwtTokenProvider, authenticationProperties,
 				Clock.fixed(NOW, ZoneOffset.UTC));
-		authService = new AuthService(refreshTokenRepository.proxy(), roleRepository, jwtTokenProvider,
-				authenticationProperties, Clock.fixed(NOW, ZoneOffset.UTC));
+	}
+
+	@Test
+	void registerCreatesPendingUserWithHashedPasswordAndDefaultRole() {
+		RegisterRequestDto request = registerRequest();
+		Role customerRole = role(12L, AppConstants.RoleNames.CUSTOMER);
+		when(userRepository.existsByEmail("customer@example.com")).thenReturn(false);
+		when(userRepository.existsByUsername("customer-one")).thenReturn(false);
+		when(passwordEncoder.encode("Password@123")).thenReturn("hashed-password");
+		when(userRepository.save(any(User.class))).thenAnswer(invocation -> withId(invocation.getArgument(0), 44L));
+		when(roleRepository.findByName(AppConstants.RoleNames.CUSTOMER)).thenReturn(Optional.of(customerRole));
+
+		RegisterResponseDto response = authService.register(request);
+
+		ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+		verify(userRepository).save(userCaptor.capture());
+		User savedUser = userCaptor.getValue();
+		assertThat(savedUser.getEmail()).isEqualTo("customer@example.com");
+		assertThat(savedUser.getUsername()).isEqualTo("customer-one");
+		assertThat(savedUser.getPassword()).isEqualTo("hashed-password");
+		assertThat(savedUser.getStatus()).isEqualTo(AccountStatus.PENDING);
+		assertThat(savedUser.isEmailVerified()).isFalse();
+		assertThat(response.username()).isEqualTo("customer-one");
+
+		ArgumentCaptor<UserRole> userRoleCaptor = ArgumentCaptor.forClass(UserRole.class);
+		verify(userRoleRepository).save(userRoleCaptor.capture());
+		assertThat(userRoleCaptor.getValue().getUser().getId()).isEqualTo(44L);
+		assertThat(userRoleCaptor.getValue().getRole()).isEqualTo(customerRole);
+	}
+
+	@Test
+	void registerRejectsDuplicateEmail() {
+		RegisterRequestDto request = registerRequest();
+		when(userRepository.existsByEmail("customer@example.com")).thenReturn(true);
+
+		assertThatThrownBy(() -> authService.register(request))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.DUPLICATE_EMAIL);
+
+		verify(userRepository, never()).save(any(User.class));
+	}
+
+	@Test
+	void registerRejectsDuplicateUsername() {
+		RegisterRequestDto request = registerRequest();
+		when(userRepository.existsByEmail("customer@example.com")).thenReturn(false);
+		when(userRepository.existsByUsername("customer-one")).thenReturn(true);
+
+		assertThatThrownBy(() -> authService.register(request))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.DUPLICATE_USERNAME);
+	}
+
+	@Test
+	void loginGeneratesAccessAndRefreshTokensForActiveVerifiedUser() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("Password@123", "hashed-password")).thenReturn(true);
+		when(roleRepository.findByUserId(55L)).thenReturn(List.of(role(2L, AppConstants.RoleNames.CUSTOMER)));
+		when(permissionRepository.findByUserId(55L)).thenReturn(List.of(permission("ORDER_READ")));
+		when(jwtTokenProvider.generateAccessToken(eq(user), eq(List.of(AppConstants.RoleNames.CUSTOMER))))
+			.thenReturn("access-token");
+
+		LoginResult result = authService.login(loginRequest(), "127.0.0.1", "JUnit");
+
+		assertThat(result.response().accessToken()).isEqualTo("access-token");
+		assertThat(result.refreshToken()).isNotBlank();
+		assertThat(result.response().user().roles()).containsExactly(AppConstants.RoleNames.CUSTOMER);
+		assertThat(result.response().user().permissions()).containsExactly("ORDER_READ");
+		assertThat(user.getLastLoginAt()).isNotNull();
+
+		ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+		verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).hasSize(64);
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).isNotEqualTo(result.refreshToken());
+
+		ArgumentCaptor<LoginAttempt> loginAttemptCaptor = ArgumentCaptor.forClass(LoginAttempt.class);
+		verify(loginAttemptRecorder).record(loginAttemptCaptor.capture());
+		assertThat(loginAttemptCaptor.getValue().isWasSuccessful()).isTrue();
+	}
+
+	@Test
+	void loginRejectsInvalidPasswordAndRecordsFailure() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("wrong-password", "hashed-password")).thenReturn(false);
+
+		assertThatThrownBy(() -> authService.login(loginRequest("wrong-password"), "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_CREDENTIALS);
+
+		ArgumentCaptor<LoginAttempt> loginAttemptCaptor = ArgumentCaptor.forClass(LoginAttempt.class);
+		verify(loginAttemptRecorder).record(loginAttemptCaptor.capture());
+		assertThat(loginAttemptCaptor.getValue().isWasSuccessful()).isFalse();
+	}
+
+	@Test
+	void loginRejectsInactiveAccount() {
+		User user = user(55L, AccountStatus.BLOCKED, true);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("Password@123", "hashed-password")).thenReturn(true);
+
+		assertThatThrownBy(() -> authService.login(loginRequest(), "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.ACCOUNT_NOT_ACTIVE);
+	}
+
+	@Test
+	void loginRejectsUnapprovedSeller() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		user.setUserType(UserType.SELLER);
+		user.setAdminApproved(false);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("Password@123", "hashed-password")).thenReturn(true);
+
+		assertThatThrownBy(() -> authService.login(loginRequest(), "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.SELLER_NOT_APPROVED);
+	}
+
+	@Test
+	void currentUserReturnsRolesAndPermissions() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		when(userRepository.findById(55L)).thenReturn(Optional.of(user));
+		when(roleRepository.findByUserId(55L)).thenReturn(List.of(role(2L, AppConstants.RoleNames.CUSTOMER)));
+		when(permissionRepository.findByUserId(55L)).thenReturn(List.of(permission("ORDER_READ")));
+
+		CurrentUserResponseDto response = authService.currentUser(55L);
+
+		assertThat(response.email()).isEqualTo("customer@example.com");
+		assertThat(response.username()).isEqualTo("customer-one");
+		assertThat(response.roles()).containsExactly(AppConstants.RoleNames.CUSTOMER);
+		assertThat(response.permissions()).containsExactly("ORDER_READ");
 	}
 
 	@Test
 	void refreshAccessTokenRotatesRefreshToken() {
-		User user = user(AccountStatus.ACTIVE, true);
-		RefreshToken currentToken = refreshToken("raw-refresh", user, NOW.plusSeconds(60), null);
-		refreshTokenRepository.token = currentToken;
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		RefreshToken currentToken = refreshToken(user, NOW.plusSeconds(60), null);
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(currentToken));
+		when(roleRepository.findByUserId(55L)).thenReturn(List.of(role(2L, AppConstants.RoleNames.CUSTOMER)));
+		when(jwtTokenProvider.generateAccessToken(eq(user), eq(List.of(AppConstants.RoleNames.CUSTOMER))))
+			.thenReturn("new-access-token");
 
 		RefreshTokenResult result = authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit");
 
-		assertThat(result.response().accessToken()).isNotBlank();
+		assertThat(result.response().accessToken()).isEqualTo("new-access-token");
 		assertThat(result.refreshToken()).isNotBlank();
 		assertThat(currentToken.getRevokedAt()).isNotNull();
 		assertThat(currentToken.getRevocationReason()).isEqualTo(RefreshTokenRevocationReason.ROTATED);
-		assertThat(refreshTokenRepository.savedToken).isNotNull();
-		assertThat(refreshTokenRepository.savedToken.getTokenHash()).hasSize(64);
-		assertThat(refreshTokenRepository.savedToken.getTokenHash()).isNotEqualTo(result.refreshToken());
-		assertThat(refreshTokenRepository.savedToken.getTokenFamilyId()).isEqualTo("family-1");
-		assertThat(refreshTokenRepository.savedToken.getParentToken()).isEqualTo(currentToken);
-		assertThat(currentToken.getReplacedByToken()).isEqualTo(refreshTokenRepository.savedToken);
+
+		ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+		verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).hasSize(64);
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).isNotEqualTo(result.refreshToken());
+		assertThat(refreshTokenCaptor.getValue().getTokenFamilyId()).isEqualTo("family-1");
+		assertThat(refreshTokenCaptor.getValue().getParentToken()).isEqualTo(currentToken);
+		assertThat(currentToken.getReplacedByToken()).isEqualTo(refreshTokenCaptor.getValue());
 	}
 
 	@Test
 	void refreshAccessTokenRejectsExpiredToken() {
-		refreshTokenRepository.token = refreshToken("raw-refresh", user(AccountStatus.ACTIVE, true),
-				NOW.minusSeconds(1), null);
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class)))
+			.thenReturn(Optional.of(refreshToken(user(55L, AccountStatus.ACTIVE, true), NOW.minusSeconds(1), null)));
 
 		assertThatThrownBy(() -> authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit"))
 			.isInstanceOf(ResponseStatusException.class)
@@ -87,51 +257,77 @@ class AuthServiceTest {
 
 	@Test
 	void refreshAccessTokenRejectsRevokedTokenAndRevokesFamily() {
-		refreshTokenRepository.token = refreshToken("raw-refresh", user(AccountStatus.ACTIVE, true), NOW.plusSeconds(60),
+		RefreshToken refreshToken = refreshToken(user(55L, AccountStatus.ACTIVE, true), NOW.plusSeconds(60),
 				LocalDateTime.ofInstant(NOW.minusSeconds(10), ZoneOffset.UTC));
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(refreshToken));
 
 		assertThatThrownBy(() -> authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit"))
 			.isInstanceOf(ResponseStatusException.class)
 			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_REVOKED);
 
-		assertThat(refreshTokenRepository.revokedFamilyId).isEqualTo("family-1");
-		assertThat(refreshTokenRepository.revocationReason).isEqualTo(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
+		verify(refreshTokenRepository).revokeActiveTokensByFamilyId(eq("family-1"), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED), any(LocalDateTime.class));
 	}
 
 	@Test
-	void logoutRevokesActiveTokenByHash() {
-		refreshTokenRepository.revokeByHashCount = 1;
+	void logoutRevokesActiveRefreshToken() {
+		when(refreshTokenRepository.revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class))).thenReturn(1);
 
 		authService.logout("raw-refresh");
 
-		assertThat(refreshTokenRepository.revokedTokenHash).isEqualTo(hash("raw-refresh"));
-		assertThat(refreshTokenRepository.revocationReason).isEqualTo(RefreshTokenRevocationReason.LOGOUT);
+		verify(refreshTokenRepository).revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
 	}
 
 	@Test
-	void logoutRejectsInvalidOrAlreadyRevokedToken() {
-		refreshTokenRepository.revokeByHashCount = 0;
+	void logoutRejectsInvalidOrAlreadyRevokedRefreshToken() {
+		when(refreshTokenRepository.revokeActiveTokenByHash(any(String.class), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class))).thenReturn(0);
 
 		assertThatThrownBy(() -> authService.logout("raw-refresh"))
 			.isInstanceOf(ResponseStatusException.class)
 			.hasMessageContaining(AppConstants.Auth.INVALID_REFRESH_TOKEN);
 	}
 
-	private RefreshToken refreshToken(String rawToken, User user, Instant expiresAt, LocalDateTime revokedAt) {
-		RefreshToken refreshToken = new RefreshToken();
-		refreshToken.setUser(user);
-		refreshToken.setTokenHash(hash(rawToken));
-		refreshToken.setTokenFamilyId("family-1");
-		refreshToken.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
-		refreshToken.setRevokedAt(revokedAt);
-		return refreshToken;
+	@Test
+	void logoutAllRevokesActiveUserRefreshTokens() {
+		authService.logoutAll(55L);
+
+		verify(refreshTokenRepository).revokeActiveTokensByUserId(eq(55L), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.LOGOUT_ALL), any(LocalDateTime.class));
 	}
 
-	private User user(AccountStatus status, boolean emailVerified) {
+	private RegisterRequestDto registerRequest() {
+		RegisterRequestDto request = new RegisterRequestDto();
+		request.setFirstName("Customer");
+		request.setLastName("One");
+		request.setUsername(" Customer-One ");
+		request.setEmail(" Customer@Example.COM ");
+		request.setPhone("+919999999999");
+		request.setPassword("Password@123");
+		request.setConfirmPassword("Password@123");
+		request.setUserType(UserType.CUSTOMER);
+		return request;
+	}
+
+	private LoginRequestDto loginRequest() {
+		return loginRequest("Password@123");
+	}
+
+	private LoginRequestDto loginRequest(String password) {
+		LoginRequestDto request = new LoginRequestDto();
+		request.setEmail(" Customer@Example.COM ");
+		request.setPassword(password);
+		return request;
+	}
+
+	private User user(Long id, AccountStatus status, boolean emailVerified) {
 		User user = new User();
-		ReflectionTestUtils.setField(user, "id", 7L);
-		user.setFirstName("Test");
-		user.setLastName("User");
+		ReflectionTestUtils.setField(user, "id", id);
+		user.setFirstName("Customer");
+		user.setLastName("One");
+		user.setUsername("customer-one");
 		user.setEmail("customer@example.com");
 		user.setPassword("hashed-password");
 		user.setUserType(UserType.CUSTOMER);
@@ -141,87 +337,31 @@ class AuthServiceTest {
 		return user;
 	}
 
-	private Role role(String name) {
+	private RefreshToken refreshToken(User user, Instant expiresAt, LocalDateTime revokedAt) {
+		RefreshToken refreshToken = new RefreshToken();
+		refreshToken.setUser(user);
+		refreshToken.setTokenHash("hashed-refresh-token");
+		refreshToken.setTokenFamilyId("family-1");
+		refreshToken.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
+		refreshToken.setRevokedAt(revokedAt);
+		return refreshToken;
+	}
+
+	private Role role(Long id, String name) {
 		Role role = new Role();
+		ReflectionTestUtils.setField(role, "id", id);
 		role.setName(name);
 		return role;
 	}
 
-	private RoleRepository roleRepository(List<Role> roles) {
-		return repositoryProxy(RoleRepository.class, invocation -> {
-			if ("findByUserId".equals(invocation.methodName())) {
-				return roles;
-			}
-			throw unsupported(invocation.methodName());
-		});
+	private Permission permission(String name) {
+		Permission permission = new Permission();
+		permission.setName(name);
+		return permission;
 	}
 
-	private String hash(String token) {
-		try {
-			Mac mac = Mac.getInstance(AppConstants.Auth.HMAC_SHA_256);
-			mac.init(new SecretKeySpec(HASH_SECRET.getBytes(StandardCharsets.UTF_8), AppConstants.Auth.HMAC_SHA_256));
-			return HexFormat.of().formatHex(mac.doFinal(token.getBytes(StandardCharsets.UTF_8)));
-		}
-		catch (Exception ex) {
-			throw new IllegalStateException(ex);
-		}
-	}
-
-	private <T> T repositoryProxy(Class<T> repositoryType, RepositoryInvocationHandler invocationHandler) {
-		Object proxy = Proxy.newProxyInstance(repositoryType.getClassLoader(), new Class<?>[] { repositoryType },
-				(proxyObject, method, args) -> {
-					if ("toString".equals(method.getName())) {
-						return repositoryType.getSimpleName() + "Proxy";
-					}
-					return invocationHandler.invoke(new RepositoryInvocation(method.getName(), args));
-				});
-		return repositoryType.cast(proxy);
-	}
-
-	private UnsupportedOperationException unsupported(String methodName) {
-		return new UnsupportedOperationException(methodName + " is not needed by this unit test");
-	}
-
-	private record RepositoryInvocation(String methodName, Object[] args) {
-	}
-
-	@FunctionalInterface
-	private interface RepositoryInvocationHandler {
-
-		Object invoke(RepositoryInvocation invocation);
-	}
-
-	private class FakeRefreshTokenRepository {
-
-		private RefreshToken token;
-		private RefreshToken savedToken;
-		private String revokedTokenHash;
-		private String revokedFamilyId;
-		private RefreshTokenRevocationReason revocationReason;
-		private int revokeByHashCount;
-
-		private RefreshTokenRepository proxy() {
-			return repositoryProxy(RefreshTokenRepository.class, invocation -> {
-				if ("findByTokenHashForUpdate".equals(invocation.methodName())) {
-					String tokenHash = (String) invocation.args()[0];
-					return token != null && token.getTokenHash().equals(tokenHash) ? Optional.of(token) : Optional.empty();
-				}
-				if ("save".equals(invocation.methodName())) {
-					savedToken = (RefreshToken) invocation.args()[0];
-					return savedToken;
-				}
-				if ("revokeActiveTokenByHash".equals(invocation.methodName())) {
-					revokedTokenHash = (String) invocation.args()[0];
-					revocationReason = (RefreshTokenRevocationReason) invocation.args()[2];
-					return revokeByHashCount;
-				}
-				if ("revokeActiveTokensByFamilyId".equals(invocation.methodName())) {
-					revokedFamilyId = (String) invocation.args()[0];
-					revocationReason = (RefreshTokenRevocationReason) invocation.args()[2];
-					return 1;
-				}
-				throw unsupported(invocation.methodName());
-			});
-		}
+	private User withId(User user, Long id) {
+		ReflectionTestUtils.setField(user, "id", id);
+		return user;
 	}
 }
