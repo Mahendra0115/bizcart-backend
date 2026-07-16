@@ -233,7 +233,7 @@ public class AuthService {
 
 	private void validateRefreshToken(RefreshToken refreshToken, LocalDateTime now) {
 		if (refreshToken.getRevokedAt() != null) {
-			if (!hasActiveReplacement(refreshToken, now)) {
+			if (!hasActiveReplacementWithinReuseGraceWindow(refreshToken, now)) {
 				refreshTokenRevocationService.revokeActiveFamilyTokens(refreshToken.getTokenFamilyId(), now,
 						RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
 			}
@@ -244,10 +244,13 @@ public class AuthService {
 		}
 	}
 
-	private boolean hasActiveReplacement(RefreshToken refreshToken, LocalDateTime now) {
+	private boolean hasActiveReplacementWithinReuseGraceWindow(RefreshToken refreshToken, LocalDateTime now) {
 		RefreshToken replacement = refreshToken.getReplacedByToken();
 		return refreshToken.getRevocationReason() == RefreshTokenRevocationReason.ROTATED && replacement != null
-				&& replacement.getRevokedAt() == null && replacement.getExpiresAt().isAfter(now);
+				&& replacement.getRevokedAt() == null && replacement.getExpiresAt().isAfter(now)
+				&& refreshToken.getRevokedAt()
+					.plusSeconds(authenticationProperties.getJwt().getRefreshTokenReuseGraceSeconds())
+					.isAfter(now);
 	}
 
 	private void validateRefreshAllowed(User user) {

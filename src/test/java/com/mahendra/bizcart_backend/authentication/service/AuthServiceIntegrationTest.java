@@ -137,6 +137,37 @@ class AuthServiceIntegrationTest {
 	}
 
 	@Test
+	void reusedOldTokenAfterRotationGraceWindowRevokesActiveReplacementFamily() {
+		User user = userRepository.save(activeVerifiedUser());
+		String familyId = "family-rotated-reuse";
+		RefreshToken originalToken = refreshTokenRepository.save(refreshToken(user, "rotated-refresh-token", familyId,
+				LocalDateTime.now(Clock.systemUTC()).plusDays(1), null, null));
+
+		authService.refreshAccessToken("rotated-refresh-token", "127.0.0.1", "JUnit");
+
+		RefreshToken rotatedOriginal = refreshTokenRepository.findById(originalToken.getId()).orElseThrow();
+		List<RefreshToken> activeFamilyTokens = refreshTokenRepository.findActiveByTokenFamilyId(familyId,
+				LocalDateTime.now(Clock.systemUTC()));
+		assertThat(activeFamilyTokens).hasSize(1);
+		RefreshToken activeReplacement = activeFamilyTokens.getFirst();
+		assertThat(activeReplacement.getParentToken().getId()).isEqualTo(rotatedOriginal.getId());
+		rotatedOriginal.setRevokedAt(LocalDateTime.now(Clock.systemUTC())
+			.minusSeconds(authenticationProperties.getJwt().getRefreshTokenReuseGraceSeconds() + 1));
+		refreshTokenRepository.saveAndFlush(rotatedOriginal);
+
+		assertThatThrownBy(() -> authService.refreshAccessToken("rotated-refresh-token", "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_REVOKED);
+
+		RefreshToken revokedReplacement = refreshTokenRepository.findById(activeReplacement.getId()).orElseThrow();
+		assertThat(revokedReplacement.getRevokedAt()).isNotNull();
+		assertThat(revokedReplacement.getRevocationReason())
+			.isEqualTo(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
+		assertThat(refreshTokenRepository.findActiveByTokenFamilyId(familyId, LocalDateTime.now(Clock.systemUTC())))
+			.isEmpty();
+	}
+
+	@Test
 	void logoutRevokesOnlyAuthenticatedUsersMatchingRefreshToken() {
 		User owner = userRepository.save(activeVerifiedUser("logout-owner@example.com", "logout-owner"));
 		User otherUser = userRepository.save(activeVerifiedUser("logout-other@example.com", "logout-other"));
