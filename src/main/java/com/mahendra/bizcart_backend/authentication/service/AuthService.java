@@ -233,13 +233,21 @@ public class AuthService {
 
 	private void validateRefreshToken(RefreshToken refreshToken, LocalDateTime now) {
 		if (refreshToken.getRevokedAt() != null) {
-			refreshTokenRevocationService.revokeActiveFamilyTokens(refreshToken.getTokenFamilyId(), now,
-					RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
+			if (!hasActiveReplacement(refreshToken, now)) {
+				refreshTokenRevocationService.revokeActiveFamilyTokens(refreshToken.getTokenFamilyId(), now,
+						RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
+			}
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_REVOKED);
 		}
 		if (!refreshToken.getExpiresAt().isAfter(now)) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_EXPIRED);
 		}
+	}
+
+	private boolean hasActiveReplacement(RefreshToken refreshToken, LocalDateTime now) {
+		RefreshToken replacement = refreshToken.getReplacedByToken();
+		return refreshToken.getRevocationReason() == RefreshTokenRevocationReason.ROTATED && replacement != null
+				&& replacement.getRevokedAt() == null && replacement.getExpiresAt().isAfter(now);
 	}
 
 	private void validateRefreshAllowed(User user) {

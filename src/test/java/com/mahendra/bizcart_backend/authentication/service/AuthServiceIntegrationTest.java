@@ -113,7 +113,8 @@ class AuthServiceIntegrationTest {
 	@Test
 	void onlyOneSimultaneousRefreshRequestSucceeds() throws Exception {
 		User user = userRepository.save(activeVerifiedUser());
-		refreshTokenRepository.save(refreshToken(user, "concurrent-refresh-token", "family-concurrent",
+		String familyId = "family-concurrent";
+		refreshTokenRepository.save(refreshToken(user, "concurrent-refresh-token", familyId,
 				LocalDateTime.now(Clock.systemUTC()).plusDays(1), null, null));
 		ExecutorService executorService = Executors.newFixedThreadPool(2);
 		CountDownLatch start = new CountDownLatch(1);
@@ -125,6 +126,10 @@ class AuthServiceIntegrationTest {
 			long successCount = List.of(first.get(), second.get()).stream().filter(Boolean::booleanValue).count();
 
 			assertThat(successCount).isEqualTo(1);
+			List<RefreshToken> activeFamilyTokens = refreshTokenRepository.findActiveByTokenFamilyId(familyId,
+					LocalDateTime.now(Clock.systemUTC()));
+			assertThat(activeFamilyTokens).hasSize(1);
+			assertThat(activeFamilyTokens.getFirst().getParentToken()).isNotNull();
 		}
 		finally {
 			executorService.shutdownNow();
