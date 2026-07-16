@@ -2,12 +2,19 @@ package com.mahendra.bizcart_backend.authentication.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 
+import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
+import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
+import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationService;
 import com.mahendra.bizcart_backend.authentication.repository.LoginAttemptRepository;
+import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -32,8 +39,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
+import org.mockito.ArgumentCaptor;
 
 @SpringBootTest
 class AuthServiceIntegrationTest {
@@ -47,6 +56,9 @@ class AuthServiceIntegrationTest {
 	private LoginAttemptRepository loginAttemptRepository;
 
 	@Autowired
+	private PasswordResetTokenRepository passwordResetTokenRepository;
+
+	@Autowired
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Autowired
@@ -58,10 +70,14 @@ class AuthServiceIntegrationTest {
 	@Autowired
 	private AuthenticationProperties authenticationProperties;
 
+	@MockBean
+	private PasswordResetNotificationService passwordResetNotificationService;
+
 	@BeforeEach
 	@AfterEach
 	void cleanDatabase() {
 		loginAttemptRepository.deleteAll();
+		passwordResetTokenRepository.deleteAll();
 		refreshTokenRepository.deleteAll();
 		userRepository.deleteAll();
 	}
@@ -186,6 +202,61 @@ class AuthServiceIntegrationTest {
 		assertThat(afterOwnerLogout.getRevocationReason()).isEqualTo(RefreshTokenRevocationReason.LOGOUT);
 	}
 
+	@Test
+	void forgotPasswordAndValidResetUseSingleHashedTokenAndRevokeRefreshTokens() {
+		User user = userRepository.save(activeVerifiedUser("reset-valid@example.com", "reset-valid"));
+		RefreshToken refreshToken = refreshTokenRepository.save(refreshToken(user, "reset-refresh-token",
+				"family-reset-valid", LocalDateTime.now(Clock.systemUTC()).plusDays(1), null, null));
+
+		authService.forgotPassword(forgotPasswordRequest(" Reset-Valid@Example.COM "));
+
+		ArgumentCaptor<String> rawTokenCaptor = ArgumentCaptor.forClass(String.class);
+		verify(passwordResetNotificationService).sendPasswordResetToken(any(User.class), rawTokenCaptor.capture());
+		String rawResetToken = rawTokenCaptor.getValue();
+		assertThat(rawResetToken).isNotBlank();
+		List<PasswordResetToken> resetTokens = passwordResetTokenRepository.findAll();
+		assertThat(resetTokens).hasSize(1);
+		assertThat(resetTokens.getFirst().getTokenHash()).isEqualTo(hashToken(rawResetToken));
+		assertThat(resetTokens.getFirst().getTokenHash()).isNotEqualTo(rawResetToken);
+
+		authService.resetPassword(resetPasswordRequest(rawResetToken, "NewPassword@123"));
+
+		PasswordResetToken usedToken = passwordResetTokenRepository.findById(resetTokens.getFirst().getId()).orElseThrow();
+		assertThat(usedToken.getUsedAt()).isNotNull();
+		RefreshToken revokedRefreshToken = refreshTokenRepository.findById(refreshToken.getId()).orElseThrow();
+		assertThat(revokedRefreshToken.getRevokedAt()).isNotNull();
+		assertThat(revokedRefreshToken.getRevocationReason()).isEqualTo(RefreshTokenRevocationReason.PASSWORD_RESET);
+	}
+
+	@Test
+	void resetPasswordRejectsInvalidToken() {
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("missing-token", "NewPassword@123")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_RESET_TOKEN);
+	}
+
+	@Test
+	void resetPasswordRejectsExpiredToken() {
+		User user = userRepository.save(activeVerifiedUser("reset-expired@example.com", "reset-expired"));
+		passwordResetTokenRepository.save(passwordResetToken(user, "expired-reset-token",
+				LocalDateTime.now(Clock.systemUTC()).minusMinutes(1), null, null));
+
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("expired-reset-token", "NewPassword@123")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.RESET_TOKEN_EXPIRED);
+	}
+
+	@Test
+	void resetPasswordRejectsReusedToken() {
+		User user = userRepository.save(activeVerifiedUser("reset-reused@example.com", "reset-reused"));
+		passwordResetTokenRepository.save(passwordResetToken(user, "reused-reset-token",
+				LocalDateTime.now(Clock.systemUTC()).plusMinutes(15), LocalDateTime.now(Clock.systemUTC()), null));
+
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("reused-reset-token", "NewPassword@123")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_RESET_TOKEN);
+	}
+
 	private User activeVerifiedUser() {
 		return activeVerifiedUser(EMAIL, "failed-login");
 	}
@@ -217,6 +288,17 @@ class AuthServiceIntegrationTest {
 		return refreshToken;
 	}
 
+	private PasswordResetToken passwordResetToken(User user, String rawToken, LocalDateTime expiresAt,
+			LocalDateTime usedAt, LocalDateTime invalidatedAt) {
+		PasswordResetToken passwordResetToken = new PasswordResetToken();
+		passwordResetToken.setUser(user);
+		passwordResetToken.setTokenHash(hashToken(rawToken));
+		passwordResetToken.setExpiresAt(expiresAt);
+		passwordResetToken.setUsedAt(usedAt);
+		passwordResetToken.setInvalidatedAt(invalidatedAt);
+		return passwordResetToken;
+	}
+
 	private boolean refreshAfterStart(CountDownLatch start, String refreshToken) throws Exception {
 		start.await();
 		try {
@@ -245,6 +327,20 @@ class AuthServiceIntegrationTest {
 		LoginRequestDto request = new LoginRequestDto();
 		request.setEmail(EMAIL);
 		request.setPassword("WrongPassword@123");
+		return request;
+	}
+
+	private ForgotPasswordRequestDto forgotPasswordRequest(String email) {
+		ForgotPasswordRequestDto request = new ForgotPasswordRequestDto();
+		request.setEmail(email);
+		return request;
+	}
+
+	private ResetPasswordRequestDto resetPasswordRequest(String token, String newPassword) {
+		ResetPasswordRequestDto request = new ResetPasswordRequestDto();
+		request.setToken(token);
+		request.setNewPassword(newPassword);
+		request.setConfirmPassword(newPassword);
 		return request;
 	}
 }

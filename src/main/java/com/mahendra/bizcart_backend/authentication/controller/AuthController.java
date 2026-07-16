@@ -1,7 +1,9 @@
 package com.mahendra.bizcart_backend.authentication.controller;
 
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.AuthResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CsrfTokenResponseDto;
@@ -99,6 +101,20 @@ public class AuthController {
 		clearRefreshTokenCookie(response);
 		return new AuthResponseDto<>(AppConstants.Auth.LOGOUT_ALL_SUCCESS,
 				new MessageResponseDto(AppConstants.Auth.LOGOUT_ALL_SUCCESS));
+	}
+
+	@PostMapping(AppConstants.Auth.FORGOT_PASSWORD_PATH)
+	public AuthResponseDto<MessageResponseDto> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDto request) {
+		authService.forgotPassword(request);
+		return new AuthResponseDto<>(AppConstants.Auth.FORGOT_PASSWORD_SUCCESS,
+				new MessageResponseDto(AppConstants.Auth.FORGOT_PASSWORD_SUCCESS));
+	}
+
+	@PostMapping(AppConstants.Auth.RESET_PASSWORD_PATH)
+	public AuthResponseDto<MessageResponseDto> resetPassword(@Valid @RequestBody ResetPasswordRequestDto request) {
+		authService.resetPassword(request);
+		return new AuthResponseDto<>(AppConstants.Auth.RESET_PASSWORD_SUCCESS,
+				new MessageResponseDto(AppConstants.Auth.RESET_PASSWORD_SUCCESS));
 	}
 
 	private String clientIp(HttpServletRequest request) {

@@ -94,6 +94,12 @@ public class GlobalExceptionHandler {
 		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.REFRESH_TOKEN_REVOKED.equals(message)) {
 			return AppConstants.Auth.AUTH_REFRESH_TOKEN_REVOKED;
 		}
+		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.RESET_TOKEN_EXPIRED.equals(message)) {
+			return AppConstants.Auth.AUTH_RESET_TOKEN_EXPIRED;
+		}
+		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.INVALID_RESET_TOKEN.equals(message)) {
+			return AppConstants.Auth.AUTH_RESET_TOKEN_INVALID;
+		}
 		if (status == HttpStatus.UNAUTHORIZED) {
 			return AppConstants.Auth.AUTH_INVALID_TOKEN;
 		}

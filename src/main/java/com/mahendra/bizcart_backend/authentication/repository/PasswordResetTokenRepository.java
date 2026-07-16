@@ -1,9 +1,11 @@
 package com.mahendra.bizcart_backend.authentication.repository;
 
 import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -50,6 +52,10 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
 
 	@Query(FIND_BY_TOKEN_HASH)
 	Optional<PasswordResetToken> findByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query(FIND_BY_TOKEN_HASH)
+	Optional<PasswordResetToken> findByTokenHashForUpdate(@Param(PARAM_TOKEN_HASH) String tokenHash);
 
 	@Query(FIND_VALID_UNUSED_BY_TOKEN_HASH)
 	Optional<PasswordResetToken> findValidUnusedByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash,

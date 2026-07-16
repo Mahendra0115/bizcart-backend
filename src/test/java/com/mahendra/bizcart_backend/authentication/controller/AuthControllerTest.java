@@ -2,6 +2,7 @@ package com.mahendra.bizcart_backend.authentication.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,8 +11,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
@@ -273,6 +276,56 @@ class AuthControllerTest {
 		verify(authService).logoutAll(55L);
 	}
 
+	@Test
+	void forgotPasswordReturnsGenericSuccessMessage() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.FORGOT_PASSWORD_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(forgotPasswordRequest())))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.FORGOT_PASSWORD_SUCCESS))
+			.andExpect(jsonPath("$.data.message").value(AppConstants.Auth.FORGOT_PASSWORD_SUCCESS));
+
+		verify(authService).forgotPassword(any(ForgotPasswordRequestDto.class));
+	}
+
+	@Test
+	void resetPasswordReturnsSuccessMessage() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.RESET_PASSWORD_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(resetPasswordRequest())))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.RESET_PASSWORD_SUCCESS))
+			.andExpect(jsonPath("$.data.message").value(AppConstants.Auth.RESET_PASSWORD_SUCCESS));
+
+		verify(authService).resetPassword(any(ResetPasswordRequestDto.class));
+	}
+
+	@Test
+	void resetPasswordInvalidTokenUsesSpecificErrorCode() throws Exception {
+		doThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_RESET_TOKEN))
+			.when(authService)
+			.resetPassword(any(ResetPasswordRequestDto.class));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.RESET_PASSWORD_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(resetPasswordRequest())))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_RESET_TOKEN_INVALID));
+	}
+
+	@Test
+	void resetPasswordExpiredTokenUsesSpecificErrorCode() throws Exception {
+		doThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.RESET_TOKEN_EXPIRED))
+			.when(authService)
+			.resetPassword(any(ResetPasswordRequestDto.class));
+
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.RESET_PASSWORD_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(resetPasswordRequest())))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_RESET_TOKEN_EXPIRED));
+	}
+
 	private RegisterRequestDto registerRequest() {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Customer");
@@ -290,6 +343,20 @@ class AuthControllerTest {
 		LoginRequestDto request = new LoginRequestDto();
 		request.setEmail("customer@example.com");
 		request.setPassword("Password@123");
+		return request;
+	}
+
+	private ForgotPasswordRequestDto forgotPasswordRequest() {
+		ForgotPasswordRequestDto request = new ForgotPasswordRequestDto();
+		request.setEmail("customer@example.com");
+		return request;
+	}
+
+	private ResetPasswordRequestDto resetPasswordRequest() {
+		ResetPasswordRequestDto request = new ResetPasswordRequestDto();
+		request.setToken("reset-token");
+		request.setNewPassword("NewPassword@123");
+		request.setConfirmPassword("NewPassword@123");
 		return request;
 	}
 
