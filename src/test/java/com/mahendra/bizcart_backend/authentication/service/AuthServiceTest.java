@@ -15,6 +15,7 @@ import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserRespo
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
+import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -30,6 +31,7 @@ import com.mahendra.bizcart_backend.user.repository.UserRepository;
 import com.mahendra.bizcart_backend.user.repository.UserRoleRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -64,6 +66,9 @@ class AuthServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Mock
+	private RefreshTokenRevocationService refreshTokenRevocationService;
+
+	@Mock
 	private LoginAttemptRecorder loginAttemptRecorder;
 
 	@Mock
@@ -81,8 +86,8 @@ class AuthServiceTest {
 		authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
 		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
 		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
-				refreshTokenRepository, loginAttemptRecorder, passwordEncoder, jwtTokenProvider, authenticationProperties,
-				Clock.fixed(NOW, ZoneOffset.UTC));
+				refreshTokenRepository, refreshTokenRevocationService, loginAttemptRecorder, passwordEncoder,
+				jwtTokenProvider, authenticationProperties, Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -218,6 +223,94 @@ class AuthServiceTest {
 		assertThat(response.permissions()).containsExactly("ORDER_READ");
 	}
 
+	@Test
+	void refreshAccessTokenRotatesRefreshToken() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		RefreshToken currentToken = refreshToken(user, NOW.plusSeconds(60), null);
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(currentToken));
+		when(roleRepository.findByUserId(55L)).thenReturn(List.of(role(2L, AppConstants.RoleNames.CUSTOMER)));
+		when(jwtTokenProvider.generateAccessToken(eq(user), eq(List.of(AppConstants.RoleNames.CUSTOMER))))
+			.thenReturn("new-access-token");
+
+		RefreshTokenResult result = authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit");
+
+		assertThat(result.response().accessToken()).isEqualTo("new-access-token");
+		assertThat(result.refreshToken()).isNotBlank();
+		assertThat(currentToken.getRevokedAt()).isNotNull();
+		assertThat(currentToken.getRevocationReason()).isEqualTo(RefreshTokenRevocationReason.ROTATED);
+
+		ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+		verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).hasSize(64);
+		assertThat(refreshTokenCaptor.getValue().getTokenHash()).isNotEqualTo(result.refreshToken());
+		assertThat(refreshTokenCaptor.getValue().getTokenFamilyId()).isEqualTo("family-1");
+		assertThat(refreshTokenCaptor.getValue().getParentToken()).isEqualTo(currentToken);
+		assertThat(currentToken.getReplacedByToken()).isEqualTo(refreshTokenCaptor.getValue());
+	}
+
+	@Test
+	void refreshAccessTokenRejectsExpiredToken() {
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class)))
+			.thenReturn(Optional.of(refreshToken(user(55L, AccountStatus.ACTIVE, true), NOW.minusSeconds(1), null)));
+
+		assertThatThrownBy(() -> authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_EXPIRED);
+	}
+
+	@Test
+	void refreshAccessTokenRejectsRevokedTokenAndRevokesFamily() {
+		RefreshToken refreshToken = refreshToken(user(55L, AccountStatus.ACTIVE, true), NOW.plusSeconds(60),
+				LocalDateTime.ofInstant(NOW.minusSeconds(10), ZoneOffset.UTC));
+		when(refreshTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(refreshToken));
+
+		assertThatThrownBy(() -> authService.refreshAccessToken("raw-refresh", "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_REVOKED);
+
+		verify(refreshTokenRevocationService).revokeActiveFamilyTokens(eq("family-1"), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED));
+	}
+
+	@Test
+	void logoutRevokesActiveRefreshToken() {
+		authService.logout(55L, "raw-refresh");
+
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(55L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
+	}
+
+	@Test
+	void logoutIgnoresInvalidOrAlreadyRevokedRefreshToken() {
+		authService.logout(55L, "raw-refresh");
+
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(55L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
+	}
+
+	@Test
+	void logoutIgnoresMissingRefreshToken() {
+		authService.logout(55L, null);
+
+		verify(refreshTokenRepository, never()).revokeActiveTokenByUserIdAndHash(any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void logoutUsesAuthenticatedUserOwnershipWhenRevokingRefreshToken() {
+		authService.logout(99L, "raw-refresh");
+
+		verify(refreshTokenRepository).revokeActiveTokenByUserIdAndHash(eq(99L), any(String.class),
+				any(LocalDateTime.class), eq(RefreshTokenRevocationReason.LOGOUT), any(LocalDateTime.class));
+	}
+
+	@Test
+	void logoutAllRevokesActiveUserRefreshTokens() {
+		authService.logoutAll(55L);
+
+		verify(refreshTokenRepository).revokeActiveTokensByUserId(eq(55L), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.LOGOUT_ALL), any(LocalDateTime.class));
+	}
+
 	private RegisterRequestDto registerRequest() {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Customer");
@@ -255,6 +348,16 @@ class AuthServiceTest {
 		user.setEmailVerified(emailVerified);
 		user.setTokenVersion(1L);
 		return user;
+	}
+
+	private RefreshToken refreshToken(User user, Instant expiresAt, LocalDateTime revokedAt) {
+		RefreshToken refreshToken = new RefreshToken();
+		refreshToken.setUser(user);
+		refreshToken.setTokenHash("hashed-refresh-token");
+		refreshToken.setTokenFamilyId("family-1");
+		refreshToken.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
+		refreshToken.setRevokedAt(revokedAt);
+		return refreshToken;
 	}
 
 	private Role role(Long id, String name) {

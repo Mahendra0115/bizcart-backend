@@ -64,6 +64,16 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 			  and rt.expiresAt > :now
 			""";
 
+	String REVOKE_ACTIVE_TOKEN_BY_USER_ID_AND_HASH = """
+			update RefreshToken rt
+			set rt.revokedAt = :revokedAt,
+			    rt.revocationReason = :revocationReason
+			where rt.user.id = :userId
+			  and rt.tokenHash = :tokenHash
+			  and rt.revokedAt is null
+			  and rt.expiresAt > :now
+			""";
+
 	String REVOKE_ACTIVE_TOKENS_BY_USER_ID = """
 			update RefreshToken rt
 			set rt.revokedAt = :revokedAt,
@@ -113,6 +123,15 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query(REVOKE_ACTIVE_TOKEN_BY_HASH)
 	int revokeActiveTokenByHash(@Param(PARAM_TOKEN_HASH) String tokenHash,
+			@Param(PARAM_REVOKED_AT) LocalDateTime revokedAt,
+			@Param(PARAM_REVOCATION_REASON) RefreshTokenRevocationReason revocationReason,
+			@Param(PARAM_NOW) LocalDateTime now);
+
+	@Transactional
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query(REVOKE_ACTIVE_TOKEN_BY_USER_ID_AND_HASH)
+	int revokeActiveTokenByUserIdAndHash(@Param(PARAM_USER_ID) Long userId,
+			@Param(PARAM_TOKEN_HASH) String tokenHash,
 			@Param(PARAM_REVOKED_AT) LocalDateTime revokedAt,
 			@Param(PARAM_REVOCATION_REASON) RefreshTokenRevocationReason revocationReason,
 			@Param(PARAM_NOW) LocalDateTime now);

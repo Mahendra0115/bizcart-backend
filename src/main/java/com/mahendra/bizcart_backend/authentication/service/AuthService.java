@@ -6,8 +6,10 @@ import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDt
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
+import com.mahendra.bizcart_backend.authentication.dto.response.TokenResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
+import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -50,6 +52,7 @@ public class AuthService {
 	private final PermissionRepository permissionRepository;
 	private final UserRoleRepository userRoleRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
+	private final RefreshTokenRevocationService refreshTokenRevocationService;
 	private final LoginAttemptRecorder loginAttemptRecorder;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
@@ -59,14 +62,15 @@ public class AuthService {
 
 	public AuthService(UserRepository userRepository, RoleRepository roleRepository,
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
-			RefreshTokenRepository refreshTokenRepository, LoginAttemptRecorder loginAttemptRecorder,
-			PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
+			RefreshTokenRepository refreshTokenRepository, RefreshTokenRevocationService refreshTokenRevocationService,
+			LoginAttemptRecorder loginAttemptRecorder, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
 			AuthenticationProperties authenticationProperties, Clock clock) {
 		this.userRepository = userRepository;
 		this.roleRepository = roleRepository;
 		this.permissionRepository = permissionRepository;
 		this.userRoleRepository = userRoleRepository;
 		this.refreshTokenRepository = refreshTokenRepository;
+		this.refreshTokenRevocationService = refreshTokenRevocationService;
 		this.loginAttemptRecorder = loginAttemptRecorder;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtTokenProvider = jwtTokenProvider;
@@ -114,12 +118,56 @@ public class AuthService {
 		List<String> roles = roleRepository.findByUserId(user.getId()).stream().map(Role::getName).toList();
 		String accessToken = jwtTokenProvider.generateAccessToken(user, roles);
 		String refreshToken = generateRefreshToken();
-		saveRefreshToken(user, refreshToken, ipAddress, userAgent);
+		refreshTokenRepository.save(createRefreshToken(user, refreshToken, UUID.randomUUID().toString(), null, ipAddress,
+				userAgent));
 
 		LoginResponseDto response = new LoginResponseDto(accessToken,
 				authenticationProperties.getJwt().getAccessTokenExpirySeconds(),
 				authenticationProperties.getJwt().getRefreshTokenExpirySeconds(), toCurrentUserResponse(user));
 		return new LoginResult(response, refreshToken);
+	}
+
+	@Transactional
+	public RefreshTokenResult refreshAccessToken(String rawRefreshToken, String ipAddress, String userAgent) {
+		RefreshToken currentToken = findRefreshTokenForUpdate(rawRefreshToken);
+		LocalDateTime now = LocalDateTime.now(clock);
+		validateRefreshToken(currentToken, now);
+
+		User user = currentToken.getUser();
+		validateRefreshAllowed(user);
+
+		String newRawRefreshToken = generateRefreshToken();
+		RefreshToken newRefreshToken = createRefreshToken(user, newRawRefreshToken, currentToken.getTokenFamilyId(),
+				currentToken, ipAddress, userAgent);
+		refreshTokenRepository.save(newRefreshToken);
+
+		currentToken.setRevokedAt(now);
+		currentToken.setRevocationReason(RefreshTokenRevocationReason.ROTATED);
+		currentToken.setReplacedByToken(newRefreshToken);
+
+		List<String> roles = roleRepository.findByUserId(user.getId()).stream().map(Role::getName).toList();
+		String accessToken = jwtTokenProvider.generateAccessToken(user, roles);
+		TokenResponseDto response = new TokenResponseDto(accessToken,
+				authenticationProperties.getJwt().getAccessTokenExpirySeconds(),
+				authenticationProperties.getJwt().getRefreshTokenExpirySeconds());
+		return new RefreshTokenResult(response, newRawRefreshToken);
+	}
+
+	@Transactional
+	public void logout(Long userId, String rawRefreshToken) {
+		if (!StringUtils.hasText(rawRefreshToken)) {
+			return;
+		}
+		String tokenHash = hashToken(rawRefreshToken);
+		LocalDateTime now = LocalDateTime.now(clock);
+		refreshTokenRepository.revokeActiveTokenByUserIdAndHash(userId, tokenHash, now,
+				RefreshTokenRevocationReason.LOGOUT, now);
+	}
+
+	@Transactional
+	public void logoutAll(Long userId) {
+		LocalDateTime now = LocalDateTime.now(clock);
+		refreshTokenRepository.revokeActiveTokensByUserId(userId, now, RefreshTokenRevocationReason.LOGOUT_ALL, now);
 	}
 
 	@Transactional(readOnly = true)
@@ -177,16 +225,58 @@ public class AuthService {
 		}
 	}
 
-	private void saveRefreshToken(User user, String rawRefreshToken, String ipAddress, String userAgent) {
+	private RefreshToken findRefreshTokenForUpdate(String rawRefreshToken) {
+		return refreshTokenRepository.findByTokenHashForUpdate(hashToken(rawRefreshToken))
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+					AppConstants.Auth.INVALID_REFRESH_TOKEN));
+	}
+
+	private void validateRefreshToken(RefreshToken refreshToken, LocalDateTime now) {
+		if (refreshToken.getRevokedAt() != null) {
+			if (!hasActiveReplacementWithinReuseGraceWindow(refreshToken, now)) {
+				refreshTokenRevocationService.revokeActiveFamilyTokens(refreshToken.getTokenFamilyId(), now,
+						RefreshTokenRevocationReason.TOKEN_REUSE_DETECTED);
+			}
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_REVOKED);
+		}
+		if (!refreshToken.getExpiresAt().isAfter(now)) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.REFRESH_TOKEN_EXPIRED);
+		}
+	}
+
+	private boolean hasActiveReplacementWithinReuseGraceWindow(RefreshToken refreshToken, LocalDateTime now) {
+		RefreshToken replacement = refreshToken.getReplacedByToken();
+		return refreshToken.getRevocationReason() == RefreshTokenRevocationReason.ROTATED && replacement != null
+				&& replacement.getRevokedAt() == null && replacement.getExpiresAt().isAfter(now)
+				&& refreshToken.getRevokedAt()
+					.plusSeconds(authenticationProperties.getJwt().getRefreshTokenReuseGraceSeconds())
+					.isAfter(now);
+	}
+
+	private void validateRefreshAllowed(User user) {
+		if (user.getStatus() != AccountStatus.ACTIVE) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, AppConstants.Auth.ACCOUNT_NOT_ACTIVE);
+		}
+		if (!user.isEmailVerified()) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, AppConstants.Auth.EMAIL_NOT_VERIFIED);
+		}
+		if (user.getUserType() == UserType.SELLER && !user.isAdminApproved()) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, AppConstants.Auth.SELLER_NOT_APPROVED);
+		}
+	}
+
+	private RefreshToken createRefreshToken(User user, String rawRefreshToken, String tokenFamilyId,
+			RefreshToken parentToken, String ipAddress, String userAgent) {
 		RefreshToken refreshToken = new RefreshToken();
 		refreshToken.setUser(user);
 		refreshToken.setTokenHash(hashToken(rawRefreshToken));
-		refreshToken.setTokenFamilyId(UUID.randomUUID().toString());
+		refreshToken.setTokenFamilyId(tokenFamilyId);
+		refreshToken.setParentToken(parentToken);
 		refreshToken.setIpAddress(normalizeNullable(ipAddress));
 		refreshToken.setDeviceInfo(normalizeNullable(userAgent));
 		refreshToken.setExpiresAt(LocalDateTime.ofInstant(Instant.now(clock)
 			.plusSeconds(authenticationProperties.getJwt().getRefreshTokenExpirySeconds()), clock.getZone()));
-		refreshTokenRepository.save(refreshToken);
+		return refreshToken;
 	}
 
 	private void recordLoginAttempt(User user, String email, String ipAddress, String userAgent, boolean successful,
@@ -225,6 +315,9 @@ public class AuthService {
 	}
 
 	private String hashToken(String token) {
+		if (!StringUtils.hasText(token)) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_REFRESH_TOKEN);
+		}
 		try {
 			Mac mac = Mac.getInstance(AppConstants.Auth.HMAC_SHA_256);
 			mac.init(new SecretKeySpec(authenticationProperties.getTokenHash().getSecret().getBytes(StandardCharsets.UTF_8),

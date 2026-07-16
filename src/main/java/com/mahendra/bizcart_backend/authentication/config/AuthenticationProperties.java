@@ -47,6 +47,9 @@ public class AuthenticationProperties {
 		@Min(1)
 		private long refreshTokenExpirySeconds = 604800;
 
+		@Min(0)
+		private long refreshTokenReuseGraceSeconds = 2;
+
 		public String getSecret() {
 			return secret;
 		}
@@ -69,6 +72,14 @@ public class AuthenticationProperties {
 
 		public void setRefreshTokenExpirySeconds(long refreshTokenExpirySeconds) {
 			this.refreshTokenExpirySeconds = refreshTokenExpirySeconds;
+		}
+
+		public long getRefreshTokenReuseGraceSeconds() {
+			return refreshTokenReuseGraceSeconds;
+		}
+
+		public void setRefreshTokenReuseGraceSeconds(long refreshTokenReuseGraceSeconds) {
+			this.refreshTokenReuseGraceSeconds = refreshTokenReuseGraceSeconds;
 		}
 	}
 

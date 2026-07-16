@@ -88,6 +88,12 @@ public class GlobalExceptionHandler {
 		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.INVALID_CREDENTIALS.equals(message)) {
 			return AppConstants.Auth.AUTH_INVALID_CREDENTIALS;
 		}
+		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.REFRESH_TOKEN_EXPIRED.equals(message)) {
+			return AppConstants.Auth.AUTH_REFRESH_TOKEN_EXPIRED;
+		}
+		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.REFRESH_TOKEN_REVOKED.equals(message)) {
+			return AppConstants.Auth.AUTH_REFRESH_TOKEN_REVOKED;
+		}
 		if (status == HttpStatus.UNAUTHORIZED) {
 			return AppConstants.Auth.AUTH_INVALID_TOKEN;
 		}
