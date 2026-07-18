@@ -26,8 +26,10 @@ import com.mahendra.bizcart_backend.authentication.security.AuthenticatedUserDet
 import com.mahendra.bizcart_backend.authentication.security.CustomUserDetailsService;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.service.LoginResult;
+import com.mahendra.bizcart_backend.authentication.service.AuthRateLimiter;
 import com.mahendra.bizcart_backend.authentication.service.AuthService;
 import com.mahendra.bizcart_backend.authentication.service.RefreshTokenResult;
+import com.mahendra.bizcart_backend.authentication.web.ClientIpResolver;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
@@ -70,6 +72,9 @@ class AuthControllerTest {
 
 	@MockBean
 	private CustomUserDetailsService customUserDetailsService;
+
+	@MockBean
+	private AuthRateLimiter authRateLimiter;
 
 	@Test
 	void registerReturnsWrappedRegisterResponse() throws Exception {
@@ -440,6 +445,11 @@ class AuthControllerTest {
 			authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
 			authenticationProperties.getRefreshCookie().setSecure(false);
 			return authenticationProperties;
+		}
+
+		@Bean
+		ClientIpResolver clientIpResolver(AuthenticationProperties authenticationProperties) {
+			return new ClientIpResolver(authenticationProperties);
 		}
 	}
 }

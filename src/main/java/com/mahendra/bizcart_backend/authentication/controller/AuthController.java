@@ -37,7 +37,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.beans.factory.annotation.Autowired;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -47,20 +46,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AuthController {
 
 	private static final String HEADER_USER_AGENT = "User-Agent";
-	private static final String HEADER_FORWARDED_FOR = "X-Forwarded-For";
-	private static final String FORWARDED_FOR_SEPARATOR = ",";
 
 	private final AuthService authService;
 	private final AuthenticationProperties authenticationProperties;
-	@Autowired(required = false)
-	private AuthRateLimiter rateLimiter;
-	@Autowired(required = false)
-	private ClientIpResolver clientIpResolver;
+	private final AuthRateLimiter rateLimiter;
+	private final ClientIpResolver clientIpResolver;
 
-	public AuthController(AuthService authService, AuthenticationProperties authenticationProperties) {
+	public AuthController(AuthService authService, AuthenticationProperties authenticationProperties,
+			AuthRateLimiter rateLimiter, ClientIpResolver clientIpResolver) {
 		this.authService = authService;
 		this.authenticationProperties = authenticationProperties;
-		this.clientIpResolver = new ClientIpResolver(authenticationProperties);
+		this.rateLimiter = rateLimiter;
+		this.clientIpResolver = clientIpResolver;
 	}
 
 	@PostMapping(AppConstants.Auth.REGISTER_PATH)
@@ -179,11 +176,11 @@ public class AuthController {
 	}
 
 	private String clientIp(HttpServletRequest request) {
-		return clientIpResolver == null ? request.getRemoteAddr() : clientIpResolver.resolve(request);
+		return clientIpResolver.resolve(request);
 	}
 
 	private void rateLimit(String operation, String key, AuthenticationProperties.Limit limit) {
-		if (rateLimiter != null) rateLimiter.check(operation, key, limit);
+		rateLimiter.check(operation, key, limit);
 	}
 
 	private String refreshToken(HttpServletRequest request) {

@@ -13,7 +13,6 @@ import java.time.Clock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -27,9 +26,8 @@ class AuthRateLimitControllerTest {
 		AuthenticationProperties properties = new AuthenticationProperties();
 		properties.getRateLimit().getForgotPassword().setMaxRequests(1);
 		properties.getRateLimit().getForgotPassword().setWindowSeconds(60);
-		AuthController controller = new AuthController(authService, properties);
-		ReflectionTestUtils.setField(controller, "rateLimiter", new AuthRateLimiter(Clock.systemUTC(), properties));
-		ReflectionTestUtils.setField(controller, "clientIpResolver", new ClientIpResolver(properties));
+		AuthController controller = new AuthController(authService, properties,
+				new AuthRateLimiter(Clock.systemUTC(), properties), new ClientIpResolver(properties));
 		mockMvc = MockMvcBuilders.standaloneSetup(controller)
 			.setControllerAdvice(new GlobalExceptionHandler())
 			.build();
