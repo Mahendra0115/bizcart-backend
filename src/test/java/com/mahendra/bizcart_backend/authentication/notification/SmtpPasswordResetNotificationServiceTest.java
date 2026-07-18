@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
-import com.mahendra.bizcart_backend.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,11 +26,7 @@ class SmtpPasswordResetNotificationServiceTest {
 		authenticationProperties.getNotification().setPasswordResetUrl("https://app.bizcart.test/reset-password");
 		SmtpPasswordResetNotificationService notificationService =
 				new SmtpPasswordResetNotificationService(mailSender, authenticationProperties);
-		User user = new User();
-		user.setFirstName("Mahendra");
-		user.setEmail("mahendra@example.com");
-
-		notificationService.sendPasswordResetToken(user, "reset token+/=");
+		notificationService.sendPasswordResetToken("mahendra@example.com", "Mahendra", "reset token+/=");
 
 		ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
 		verify(mailSender).send(messageCaptor.capture());

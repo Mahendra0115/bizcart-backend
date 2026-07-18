@@ -33,6 +33,6 @@ bizcart:
     refresh-cookie:
       secure: true
     notification:
-      password-reset-provider: ${BIZCART_AUTH_PASSWORD_RESET_PROVIDER:no-op}
-      password-reset-from: ${BIZCART_AUTH_PASSWORD_RESET_FROM:no-reply@bizcart.local}
-      password-reset-url: ${BIZCART_AUTH_PASSWORD_RESET_URL:http://localhost:5173/reset-password}
+      password-reset-provider: ${BIZCART_AUTH_PASSWORD_RESET_PROVIDER}
+      password-reset-from: ${BIZCART_AUTH_PASSWORD_RESET_FROM}
+      password-reset-url: ${BIZCART_AUTH_PASSWORD_RESET_URL}

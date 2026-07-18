@@ -1,8 +1,12 @@
 package com.mahendra.bizcart_backend.authentication.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
@@ -207,11 +211,15 @@ class AuthServiceIntegrationTest {
 		User user = userRepository.save(activeVerifiedUser("reset-valid@example.com", "reset-valid"));
 		RefreshToken refreshToken = refreshTokenRepository.save(refreshToken(user, "reset-refresh-token",
 				"family-reset-valid", LocalDateTime.now(Clock.systemUTC()).plusDays(1), null, null));
+		doAnswer(invocation -> {
+			assertThat(passwordResetTokenRepository.count()).isEqualTo(1);
+			return null;
+		}).when(passwordResetNotificationService).sendPasswordResetToken(any(), any(), any());
 
 		authService.forgotPassword(forgotPasswordRequest(" Reset-Valid@Example.COM "));
 
 		ArgumentCaptor<String> rawTokenCaptor = ArgumentCaptor.forClass(String.class);
-		verify(passwordResetNotificationService).sendPasswordResetToken(any(User.class), rawTokenCaptor.capture());
+		verify(passwordResetNotificationService).sendPasswordResetToken(any(), any(), rawTokenCaptor.capture());
 		String rawResetToken = rawTokenCaptor.getValue();
 		assertThat(rawResetToken).isNotBlank();
 		List<PasswordResetToken> resetTokens = passwordResetTokenRepository.findAll();
@@ -226,6 +234,27 @@ class AuthServiceIntegrationTest {
 		RefreshToken revokedRefreshToken = refreshTokenRepository.findById(refreshToken.getId()).orElseThrow();
 		assertThat(revokedRefreshToken.getRevokedAt()).isNotNull();
 		assertThat(revokedRefreshToken.getRevocationReason()).isEqualTo(RefreshTokenRevocationReason.PASSWORD_RESET);
+	}
+
+	@Test
+	void forgotPasswordUnknownEmailReturnsGenericSuccessWithoutTokenOrNotification() {
+		assertThatCode(() -> authService.forgotPassword(forgotPasswordRequest("unknown@example.com")))
+			.doesNotThrowAnyException();
+
+		assertThat(passwordResetTokenRepository.findAll()).isEmpty();
+		verify(passwordResetNotificationService, never()).sendPasswordResetToken(any(), any(), any());
+	}
+
+	@Test
+	void forgotPasswordNotificationFailureDoesNotRollbackTokenOrReachClient() {
+		userRepository.save(activeVerifiedUser("smtp-failure@example.com", "smtp-failure"));
+		doThrow(new IllegalStateException("SMTP unavailable")).when(passwordResetNotificationService)
+			.sendPasswordResetToken(any(), any(), any());
+
+		assertThatCode(() -> authService.forgotPassword(forgotPasswordRequest("smtp-failure@example.com")))
+			.doesNotThrowAnyException();
+
+		assertThat(passwordResetTokenRepository.findAll()).hasSize(1);
 	}
 
 	@Test

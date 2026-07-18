@@ -13,7 +13,7 @@ import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
-import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationService;
+import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
 import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
@@ -41,6 +41,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,7 +62,7 @@ public class AuthService {
 	private final PasswordResetTokenRepository passwordResetTokenRepository;
 	private final RefreshTokenRevocationService refreshTokenRevocationService;
 	private final LoginAttemptRecorder loginAttemptRecorder;
-	private final PasswordResetNotificationService passwordResetNotificationService;
+	private final ApplicationEventPublisher eventPublisher;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final AuthenticationProperties authenticationProperties;
@@ -72,7 +73,7 @@ public class AuthService {
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
 			RefreshTokenRepository refreshTokenRepository, PasswordResetTokenRepository passwordResetTokenRepository,
 			RefreshTokenRevocationService refreshTokenRevocationService,
-			LoginAttemptRecorder loginAttemptRecorder, PasswordResetNotificationService passwordResetNotificationService,
+			LoginAttemptRecorder loginAttemptRecorder, ApplicationEventPublisher eventPublisher,
 			PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
 			AuthenticationProperties authenticationProperties, Clock clock) {
 		this.userRepository = userRepository;
@@ -83,7 +84,7 @@ public class AuthService {
 		this.passwordResetTokenRepository = passwordResetTokenRepository;
 		this.refreshTokenRevocationService = refreshTokenRevocationService;
 		this.loginAttemptRecorder = loginAttemptRecorder;
-		this.passwordResetNotificationService = passwordResetNotificationService;
+		this.eventPublisher = eventPublisher;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtTokenProvider = jwtTokenProvider;
 		this.authenticationProperties = authenticationProperties;
@@ -194,7 +195,8 @@ public class AuthService {
 		passwordResetTokenRepository.invalidateActiveTokensByUserId(user.getId(), now, now);
 		String rawResetToken = generateResetToken();
 		passwordResetTokenRepository.save(createPasswordResetToken(user, rawResetToken));
-		passwordResetNotificationService.sendPasswordResetToken(user, rawResetToken);
+		eventPublisher.publishEvent(new PasswordResetNotificationEvent(user.getId(), user.getEmail(),
+				user.getFirstName(), rawResetToken));
 	}
 
 	@Transactional

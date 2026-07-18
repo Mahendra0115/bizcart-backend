@@ -19,7 +19,7 @@ import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
-import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationService;
+import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
 import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
@@ -46,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
@@ -80,7 +81,7 @@ class AuthServiceTest {
 	private LoginAttemptRecorder loginAttemptRecorder;
 
 	@Mock
-	private PasswordResetNotificationService passwordResetNotificationService;
+	private ApplicationEventPublisher eventPublisher;
 
 	@Mock
 	private PasswordEncoder passwordEncoder;
@@ -99,7 +100,7 @@ class AuthServiceTest {
 		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
 		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
 				refreshTokenRepository, passwordResetTokenRepository, refreshTokenRevocationService, loginAttemptRecorder,
-				passwordResetNotificationService, passwordEncoder, jwtTokenProvider, authenticationProperties,
+				eventPublisher, passwordEncoder, jwtTokenProvider, authenticationProperties,
 				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
@@ -325,7 +326,7 @@ class AuthServiceTest {
 	}
 
 	@Test
-	void forgotPasswordCreatesHashedResetTokenAndSendsNotificationForExistingUser() {
+	void forgotPasswordCreatesHashedResetTokenAndPublishesNotificationEventForExistingUser() {
 		User user = user(55L, AccountStatus.ACTIVE, true);
 		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
 
@@ -339,7 +340,14 @@ class AuthServiceTest {
 		assertThat(resetTokenCaptor.getValue().getTokenHash()).hasSize(64);
 		assertThat(resetTokenCaptor.getValue().getExpiresAt())
 			.isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(900), ZoneOffset.UTC));
-		verify(passwordResetNotificationService).sendPasswordResetToken(eq(user), any(String.class));
+
+		ArgumentCaptor<PasswordResetNotificationEvent> eventCaptor =
+				ArgumentCaptor.forClass(PasswordResetNotificationEvent.class);
+		verify(eventPublisher).publishEvent(eventCaptor.capture());
+		assertThat(eventCaptor.getValue().userId()).isEqualTo(55L);
+		assertThat(eventCaptor.getValue().email()).isEqualTo("customer@example.com");
+		assertThat(eventCaptor.getValue().firstName()).isEqualTo("Customer");
+		assertThat(eventCaptor.getValue().resetToken()).isNotBlank();
 	}
 
 	@Test
@@ -349,7 +357,7 @@ class AuthServiceTest {
 		authService.forgotPassword(forgotPasswordRequest(" Missing@Example.COM "));
 
 		verify(passwordResetTokenRepository, never()).save(any());
-		verify(passwordResetNotificationService, never()).sendPasswordResetToken(any(), any());
+		verify(eventPublisher, never()).publishEvent(any());
 	}
 
 	@Test

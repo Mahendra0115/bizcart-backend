@@ -2,7 +2,6 @@ package com.mahendra.bizcart_backend.authentication.notification;
 
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
-import com.mahendra.bizcart_backend.user.entity.User;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,13 +24,13 @@ public class SmtpPasswordResetNotificationService implements PasswordResetNotifi
 	}
 
 	@Override
-	public void sendPasswordResetToken(User user, String resetToken) {
+	public void sendPasswordResetToken(String email, String firstName, String resetToken) {
 		AuthenticationProperties.Notification notification = authenticationProperties.getNotification();
 		SimpleMailMessage message = new SimpleMailMessage();
 		message.setFrom(notification.getPasswordResetFrom());
-		message.setTo(user.getEmail());
+		message.setTo(email);
 		message.setSubject(notification.getPasswordResetSubject());
-		message.setText(passwordResetMessage(user, passwordResetLink(notification.getPasswordResetUrl(), resetToken)));
+		message.setText(passwordResetMessage(firstName, passwordResetLink(notification.getPasswordResetUrl(), resetToken)));
 		mailSender.send(message);
 	}
 
@@ -40,7 +39,7 @@ public class SmtpPasswordResetNotificationService implements PasswordResetNotifi
 		return baseUrl + separator + "token=" + URLEncoder.encode(resetToken, StandardCharsets.UTF_8);
 	}
 
-	private String passwordResetMessage(User user, String resetLink) {
+	private String passwordResetMessage(String firstName, String resetLink) {
 		return """
 				Hi %s,
 
@@ -53,6 +52,6 @@ public class SmtpPasswordResetNotificationService implements PasswordResetNotifi
 
 				Thanks,
 				BizCart Team
-				""".formatted(user.getFirstName(), resetLink);
+				""".formatted(firstName, resetLink);
 	}
 }
