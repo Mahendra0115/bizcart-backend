@@ -27,6 +27,13 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
 			where vt.tokenHash = :tokenHash
 			""";
 
+	String FIND_BY_TOKEN_HASH_AND_TYPE = """
+			select vt
+			from VerificationToken vt
+			where vt.tokenHash = :tokenHash
+			  and vt.verificationType = :verificationType
+			""";
+
 	String FIND_VALID_UNVERIFIED_BY_TOKEN_HASH = """
 			select vt
 			from VerificationToken vt
@@ -57,8 +64,10 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
 	Optional<VerificationToken> findByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@Query(FIND_BY_TOKEN_HASH)
-	Optional<VerificationToken> findByTokenHashForUpdate(@Param(PARAM_TOKEN_HASH) String tokenHash);
+	@Query(FIND_BY_TOKEN_HASH_AND_TYPE)
+	Optional<VerificationToken> findByTokenHashAndVerificationTypeForUpdate(
+			@Param(PARAM_TOKEN_HASH) String tokenHash,
+			@Param(PARAM_VERIFICATION_TYPE) VerificationType verificationType);
 
 	@Query(FIND_VALID_UNVERIFIED_BY_TOKEN_HASH)
 	Optional<VerificationToken> findValidUnverifiedByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash,

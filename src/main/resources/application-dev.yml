@@ -36,3 +36,6 @@ bizcart:
       password-reset-provider: ${BIZCART_AUTH_PASSWORD_RESET_PROVIDER}
       password-reset-from: ${BIZCART_AUTH_PASSWORD_RESET_FROM}
       password-reset-url: ${BIZCART_AUTH_PASSWORD_RESET_URL}
+      verification-provider: smtp
+      verification-from: ${BIZCART_AUTH_VERIFICATION_FROM}
+      verification-url: ${BIZCART_AUTH_VERIFICATION_URL}

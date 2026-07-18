@@ -6,6 +6,9 @@ spring:
 
 bizcart:
   auth:
+    rate-limit:
+      max-buckets: ${AUTH_RATE_LIMIT_MAX_BUCKETS:100000}
+      cleanup-interval-ms: ${AUTH_RATE_LIMIT_CLEANUP_INTERVAL_MS:60000}
     cleanup:
       cron: ${AUTH_CLEANUP_CRON:0 0 3 * * *}
       inactive-token-retention-days: ${AUTH_INACTIVE_TOKEN_RETENTION_DAYS:7}

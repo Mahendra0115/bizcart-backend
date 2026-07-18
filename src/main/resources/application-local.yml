@@ -30,10 +30,13 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
 
 bizcart:
+  redis:
+    startup-check:
+      enabled: ${BIZCART_REDIS_STARTUP_CHECK_ENABLED:false}
   auth:
     jwt:
       secret: ${BIZCART_AUTH_JWT_SECRET:local-development-0123456789abcdef0123456789abcdef}

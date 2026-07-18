@@ -116,11 +116,14 @@ public class AuthenticationProperties {
 		private final Limit resetPassword = new Limit(10, 3600);
 		private final Limit resendVerification = new Limit(3, 3600);
 		private final Limit refreshToken = new Limit(30, 60);
+		@Min(1) private int maxBuckets = 100000;
 		public Limit getLogin() { return login; }
 		public Limit getForgotPassword() { return forgotPassword; }
 		public Limit getResetPassword() { return resetPassword; }
 		public Limit getResendVerification() { return resendVerification; }
 		public Limit getRefreshToken() { return refreshToken; }
+		public int getMaxBuckets() { return maxBuckets; }
+		public void setMaxBuckets(int value) { this.maxBuckets = value; }
 	}
 
 	public static class Limit {

@@ -128,7 +128,8 @@ public class AuthService {
 	@Transactional
 	public void verifyEmail(String rawToken) {
 		LocalDateTime now = LocalDateTime.now(clock);
-		VerificationToken token = verificationTokenRepository.findByTokenHashForUpdate(hashToken(rawToken))
+		VerificationToken token = verificationTokenRepository.findByTokenHashAndVerificationTypeForUpdate(
+				hashToken(rawToken), VerificationType.EMAIL_VERIFICATION)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
 					AppConstants.Auth.INVALID_VERIFICATION_TOKEN));
 		if (token.getVerifiedAt() != null || token.getInvalidatedAt() != null) {

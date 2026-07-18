@@ -49,5 +49,7 @@ class MySqlAuthenticationRepositoryIntegrationTest {
 		token.setExpiresAt(LocalDateTime.now().plusHours(24));
 		verificationTokens.saveAndFlush(token);
 		assertThat(verificationTokens.findByTokenHash("sha256-hash-only")).isPresent();
+		assertThat(verificationTokens.findByTokenHashAndVerificationTypeForUpdate(
+				"sha256-hash-only", VerificationType.EMAIL_VERIFICATION)).isPresent();
 	}
 }

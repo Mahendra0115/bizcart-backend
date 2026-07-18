@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +16,7 @@ import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordReq
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ChangePasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
@@ -326,6 +328,47 @@ class AuthControllerTest {
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_RESET_TOKEN_EXPIRED));
 	}
 
+	@Test
+	void verifyEmailDelegatesTokenAndReturnsSuccess() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.VERIFY_EMAIL_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"raw-verification-token\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VERIFY_EMAIL_SUCCESS));
+
+		verify(authService).verifyEmail("raw-verification-token");
+	}
+
+	@Test
+	void resendVerificationAlwaysReturnsGenericSuccess() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.RESEND_VERIFICATION_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"unknown@example.com\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.RESEND_VERIFICATION_SUCCESS));
+
+		verify(authService).resendVerification("unknown@example.com");
+	}
+
+	@Test
+	void changePasswordUsesAuthenticatedUser() throws Exception {
+		AuthenticatedUserDetails principal = new AuthenticatedUserDetails(user(), List.of());
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+		try {
+			mockMvc.perform(put(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.CHANGE_PASSWORD_PATH)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(changePasswordRequest())))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value(AppConstants.Auth.CHANGE_PASSWORD_SUCCESS));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		verify(authService).changePassword(eq(55L), any(ChangePasswordRequestDto.class));
+	}
+
 	private RegisterRequestDto registerRequest() {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Customer");
@@ -355,6 +398,14 @@ class AuthControllerTest {
 	private ResetPasswordRequestDto resetPasswordRequest() {
 		ResetPasswordRequestDto request = new ResetPasswordRequestDto();
 		request.setToken("reset-token");
+		request.setNewPassword("NewPassword@123");
+		request.setConfirmPassword("NewPassword@123");
+		return request;
+	}
+
+	private ChangePasswordRequestDto changePasswordRequest() {
+		ChangePasswordRequestDto request = new ChangePasswordRequestDto();
+		request.setCurrentPassword("Password@123");
 		request.setNewPassword("NewPassword@123");
 		request.setConfirmPassword("NewPassword@123");
 		return request;
