@@ -15,6 +15,7 @@ public class AuthenticationProperties {
 	private final Cors cors = new Cors();
 	private final TokenHash tokenHash = new TokenHash();
 	private final RefreshCookie refreshCookie = new RefreshCookie();
+	private final Notification notification = new Notification();
 
 	public Jwt getJwt() {
 		return jwt;
@@ -36,6 +37,10 @@ public class AuthenticationProperties {
 		return refreshCookie;
 	}
 
+	public Notification getNotification() {
+		return notification;
+	}
+
 	public static class Jwt {
 
 		@NotBlank
@@ -49,6 +54,9 @@ public class AuthenticationProperties {
 
 		@Min(0)
 		private long refreshTokenReuseGraceSeconds = 2;
+
+		@Min(1)
+		private long passwordResetTokenExpirySeconds = 900;
 
 		public String getSecret() {
 			return secret;
@@ -80,6 +88,14 @@ public class AuthenticationProperties {
 
 		public void setRefreshTokenReuseGraceSeconds(long refreshTokenReuseGraceSeconds) {
 			this.refreshTokenReuseGraceSeconds = refreshTokenReuseGraceSeconds;
+		}
+
+		public long getPasswordResetTokenExpirySeconds() {
+			return passwordResetTokenExpirySeconds;
+		}
+
+		public void setPasswordResetTokenExpirySeconds(long passwordResetTokenExpirySeconds) {
+			this.passwordResetTokenExpirySeconds = passwordResetTokenExpirySeconds;
 		}
 	}
 
@@ -197,6 +213,49 @@ public class AuthenticationProperties {
 
 		public void setSecure(boolean secure) {
 			this.secure = secure;
+		}
+	}
+
+	public static class Notification {
+
+		private String passwordResetProvider = AppConstants.Auth.NOTIFICATION_PROVIDER_NO_OP;
+
+		private String passwordResetFrom = "no-reply@bizcart.local";
+
+		private String passwordResetUrl = "http://localhost:5173/reset-password";
+
+		private String passwordResetSubject = AppConstants.Auth.PASSWORD_RESET_EMAIL_SUBJECT;
+
+		public String getPasswordResetProvider() {
+			return passwordResetProvider;
+		}
+
+		public void setPasswordResetProvider(String passwordResetProvider) {
+			this.passwordResetProvider = passwordResetProvider;
+		}
+
+		public String getPasswordResetFrom() {
+			return passwordResetFrom;
+		}
+
+		public void setPasswordResetFrom(String passwordResetFrom) {
+			this.passwordResetFrom = passwordResetFrom;
+		}
+
+		public String getPasswordResetUrl() {
+			return passwordResetUrl;
+		}
+
+		public void setPasswordResetUrl(String passwordResetUrl) {
+			this.passwordResetUrl = passwordResetUrl;
+		}
+
+		public String getPasswordResetSubject() {
+			return passwordResetSubject;
+		}
+
+		public void setPasswordResetSubject(String passwordResetSubject) {
+			this.passwordResetSubject = passwordResetSubject;
 		}
 	}
 }

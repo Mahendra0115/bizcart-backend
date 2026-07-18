@@ -2,14 +2,19 @@ package com.mahendra.bizcart_backend.authentication.service;
 
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.TokenResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
+import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
+import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
+import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -36,6 +41,7 @@ import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,14 +52,17 @@ import org.springframework.web.server.ResponseStatusException;
 public class AuthService {
 
 	private static final int REFRESH_TOKEN_BYTES = 64;
+	private static final int RESET_TOKEN_BYTES = 64;
 
 	private final UserRepository userRepository;
 	private final RoleRepository roleRepository;
 	private final PermissionRepository permissionRepository;
 	private final UserRoleRepository userRoleRepository;
 	private final RefreshTokenRepository refreshTokenRepository;
+	private final PasswordResetTokenRepository passwordResetTokenRepository;
 	private final RefreshTokenRevocationService refreshTokenRevocationService;
 	private final LoginAttemptRecorder loginAttemptRecorder;
+	private final ApplicationEventPublisher eventPublisher;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final AuthenticationProperties authenticationProperties;
@@ -62,16 +71,20 @@ public class AuthService {
 
 	public AuthService(UserRepository userRepository, RoleRepository roleRepository,
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
-			RefreshTokenRepository refreshTokenRepository, RefreshTokenRevocationService refreshTokenRevocationService,
-			LoginAttemptRecorder loginAttemptRecorder, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
+			RefreshTokenRepository refreshTokenRepository, PasswordResetTokenRepository passwordResetTokenRepository,
+			RefreshTokenRevocationService refreshTokenRevocationService,
+			LoginAttemptRecorder loginAttemptRecorder, ApplicationEventPublisher eventPublisher,
+			PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
 			AuthenticationProperties authenticationProperties, Clock clock) {
 		this.userRepository = userRepository;
 		this.roleRepository = roleRepository;
 		this.permissionRepository = permissionRepository;
 		this.userRoleRepository = userRoleRepository;
 		this.refreshTokenRepository = refreshTokenRepository;
+		this.passwordResetTokenRepository = passwordResetTokenRepository;
 		this.refreshTokenRevocationService = refreshTokenRevocationService;
 		this.loginAttemptRecorder = loginAttemptRecorder;
+		this.eventPublisher = eventPublisher;
 		this.passwordEncoder = passwordEncoder;
 		this.jwtTokenProvider = jwtTokenProvider;
 		this.authenticationProperties = authenticationProperties;
@@ -168,6 +181,37 @@ public class AuthService {
 	public void logoutAll(Long userId) {
 		LocalDateTime now = LocalDateTime.now(clock);
 		refreshTokenRepository.revokeActiveTokensByUserId(userId, now, RefreshTokenRevocationReason.LOGOUT_ALL, now);
+	}
+
+	@Transactional
+	public void forgotPassword(ForgotPasswordRequestDto request) {
+		String normalizedEmail = normalizeEmail(request.getEmail());
+		User user = userRepository.findByNormalizedEmail(normalizedEmail).orElse(null);
+		if (user == null) {
+			return;
+		}
+
+		LocalDateTime now = LocalDateTime.now(clock);
+		passwordResetTokenRepository.invalidateActiveTokensByUserId(user.getId(), now, now);
+		String rawResetToken = generateResetToken();
+		passwordResetTokenRepository.save(createPasswordResetToken(user, rawResetToken));
+		eventPublisher.publishEvent(new PasswordResetNotificationEvent(user.getId(), user.getEmail(),
+				user.getFirstName(), rawResetToken));
+	}
+
+	@Transactional
+	public void resetPassword(ResetPasswordRequestDto request) {
+		LocalDateTime now = LocalDateTime.now(clock);
+		PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHashForUpdate(hashToken(request.getToken()))
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+					AppConstants.Auth.INVALID_RESET_TOKEN));
+		validatePasswordResetToken(resetToken, now);
+
+		User user = resetToken.getUser();
+		user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+		resetToken.setUsedAt(now);
+		refreshTokenRepository.revokeActiveTokensByUserId(user.getId(), now, RefreshTokenRevocationReason.PASSWORD_RESET,
+				now);
 	}
 
 	@Transactional(readOnly = true)
@@ -279,6 +323,24 @@ public class AuthService {
 		return refreshToken;
 	}
 
+	private PasswordResetToken createPasswordResetToken(User user, String rawResetToken) {
+		PasswordResetToken passwordResetToken = new PasswordResetToken();
+		passwordResetToken.setUser(user);
+		passwordResetToken.setTokenHash(hashToken(rawResetToken));
+		passwordResetToken.setExpiresAt(LocalDateTime.ofInstant(Instant.now(clock)
+			.plusSeconds(authenticationProperties.getJwt().getPasswordResetTokenExpirySeconds()), clock.getZone()));
+		return passwordResetToken;
+	}
+
+	private void validatePasswordResetToken(PasswordResetToken resetToken, LocalDateTime now) {
+		if (resetToken.getUsedAt() != null || resetToken.getInvalidatedAt() != null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_RESET_TOKEN);
+		}
+		if (!resetToken.getExpiresAt().isAfter(now)) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.RESET_TOKEN_EXPIRED);
+		}
+	}
+
 	private void recordLoginAttempt(User user, String email, String ipAddress, String userAgent, boolean successful,
 			String failureReason) {
 		LoginAttempt loginAttempt = new LoginAttempt();
@@ -309,7 +371,15 @@ public class AuthService {
 	}
 
 	private String generateRefreshToken() {
-		byte[] bytes = new byte[REFRESH_TOKEN_BYTES];
+		return generateToken(REFRESH_TOKEN_BYTES);
+	}
+
+	private String generateResetToken() {
+		return generateToken(RESET_TOKEN_BYTES);
+	}
+
+	private String generateToken(int byteCount) {
+		byte[] bytes = new byte[byteCount];
 		secureRandom.nextBytes(bytes);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}

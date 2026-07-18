@@ -7,6 +7,18 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:false}
+          starttls:
+            enable: ${SMTP_STARTTLS_ENABLE:false}
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -20,3 +32,7 @@ bizcart:
       secret: ${BIZCART_AUTH_TOKEN_HASH_SECRET}
     refresh-cookie:
       secure: true
+    notification:
+      password-reset-provider: ${BIZCART_AUTH_PASSWORD_RESET_PROVIDER}
+      password-reset-from: ${BIZCART_AUTH_PASSWORD_RESET_FROM}
+      password-reset-url: ${BIZCART_AUTH_PASSWORD_RESET_URL}

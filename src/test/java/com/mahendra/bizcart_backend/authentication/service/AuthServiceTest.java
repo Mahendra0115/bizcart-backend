@@ -9,13 +9,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
+import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
+import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
+import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
+import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
@@ -41,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
@@ -66,10 +72,16 @@ class AuthServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Mock
+	private PasswordResetTokenRepository passwordResetTokenRepository;
+
+	@Mock
 	private RefreshTokenRevocationService refreshTokenRevocationService;
 
 	@Mock
 	private LoginAttemptRecorder loginAttemptRecorder;
+
+	@Mock
+	private ApplicationEventPublisher eventPublisher;
 
 	@Mock
 	private PasswordEncoder passwordEncoder;
@@ -84,10 +96,12 @@ class AuthServiceTest {
 		AuthenticationProperties authenticationProperties = new AuthenticationProperties();
 		authenticationProperties.getJwt().setAccessTokenExpirySeconds(900);
 		authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
+		authenticationProperties.getJwt().setPasswordResetTokenExpirySeconds(900);
 		authenticationProperties.getTokenHash().setSecret("test-token-hash-0123456789abcdef0123456789abcdef");
 		authService = new AuthService(userRepository, roleRepository, permissionRepository, userRoleRepository,
-				refreshTokenRepository, refreshTokenRevocationService, loginAttemptRecorder, passwordEncoder,
-				jwtTokenProvider, authenticationProperties, Clock.fixed(NOW, ZoneOffset.UTC));
+				refreshTokenRepository, passwordResetTokenRepository, refreshTokenRevocationService, loginAttemptRecorder,
+				eventPublisher, passwordEncoder, jwtTokenProvider, authenticationProperties,
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -311,6 +325,87 @@ class AuthServiceTest {
 				eq(RefreshTokenRevocationReason.LOGOUT_ALL), any(LocalDateTime.class));
 	}
 
+	@Test
+	void forgotPasswordCreatesHashedResetTokenAndPublishesNotificationEventForExistingUser() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+
+		authService.forgotPassword(forgotPasswordRequest());
+
+		verify(passwordResetTokenRepository).invalidateActiveTokensByUserId(eq(55L), any(LocalDateTime.class),
+				any(LocalDateTime.class));
+		ArgumentCaptor<PasswordResetToken> resetTokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
+		verify(passwordResetTokenRepository).save(resetTokenCaptor.capture());
+		assertThat(resetTokenCaptor.getValue().getUser()).isEqualTo(user);
+		assertThat(resetTokenCaptor.getValue().getTokenHash()).hasSize(64);
+		assertThat(resetTokenCaptor.getValue().getExpiresAt())
+			.isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(900), ZoneOffset.UTC));
+
+		ArgumentCaptor<PasswordResetNotificationEvent> eventCaptor =
+				ArgumentCaptor.forClass(PasswordResetNotificationEvent.class);
+		verify(eventPublisher).publishEvent(eventCaptor.capture());
+		assertThat(eventCaptor.getValue().userId()).isEqualTo(55L);
+		assertThat(eventCaptor.getValue().email()).isEqualTo("customer@example.com");
+		assertThat(eventCaptor.getValue().firstName()).isEqualTo("Customer");
+		assertThat(eventCaptor.getValue().resetToken()).isNotBlank();
+	}
+
+	@Test
+	void forgotPasswordDoesNotRevealUnknownEmail() {
+		when(userRepository.findByNormalizedEmail("missing@example.com")).thenReturn(Optional.empty());
+
+		authService.forgotPassword(forgotPasswordRequest(" Missing@Example.COM "));
+
+		verify(passwordResetTokenRepository, never()).save(any());
+		verify(eventPublisher, never()).publishEvent(any());
+	}
+
+	@Test
+	void resetPasswordAcceptsValidTokenAndRevokesRefreshTokens() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		PasswordResetToken resetToken = passwordResetToken(user, NOW.plusSeconds(60), null, null);
+		when(passwordResetTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(resetToken));
+		when(passwordEncoder.encode("NewPassword@123")).thenReturn("new-hashed-password");
+
+		authService.resetPassword(resetPasswordRequest("reset-token"));
+
+		assertThat(user.getPassword()).isEqualTo("new-hashed-password");
+		assertThat(resetToken.getUsedAt()).isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+		verify(refreshTokenRepository).revokeActiveTokensByUserId(eq(55L), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.PASSWORD_RESET), any(LocalDateTime.class));
+	}
+
+	@Test
+	void resetPasswordRejectsInvalidToken() {
+		when(passwordResetTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("invalid-token")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_RESET_TOKEN);
+	}
+
+	@Test
+	void resetPasswordRejectsExpiredToken() {
+		PasswordResetToken resetToken = passwordResetToken(user(55L, AccountStatus.ACTIVE, true), NOW.minusSeconds(1), null,
+				null);
+		when(passwordResetTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(resetToken));
+
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("expired-token")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.RESET_TOKEN_EXPIRED);
+	}
+
+	@Test
+	void resetPasswordRejectsReusedToken() {
+		PasswordResetToken resetToken = passwordResetToken(user(55L, AccountStatus.ACTIVE, true), NOW.plusSeconds(60),
+				LocalDateTime.ofInstant(NOW.minusSeconds(1), ZoneOffset.UTC), null);
+		when(passwordResetTokenRepository.findByTokenHashForUpdate(any(String.class))).thenReturn(Optional.of(resetToken));
+
+		assertThatThrownBy(() -> authService.resetPassword(resetPasswordRequest("used-token")))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_RESET_TOKEN);
+	}
+
 	private RegisterRequestDto registerRequest() {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Customer");
@@ -332,6 +427,24 @@ class AuthServiceTest {
 		LoginRequestDto request = new LoginRequestDto();
 		request.setEmail(" Customer@Example.COM ");
 		request.setPassword(password);
+		return request;
+	}
+
+	private ForgotPasswordRequestDto forgotPasswordRequest() {
+		return forgotPasswordRequest(" Customer@Example.COM ");
+	}
+
+	private ForgotPasswordRequestDto forgotPasswordRequest(String email) {
+		ForgotPasswordRequestDto request = new ForgotPasswordRequestDto();
+		request.setEmail(email);
+		return request;
+	}
+
+	private ResetPasswordRequestDto resetPasswordRequest(String token) {
+		ResetPasswordRequestDto request = new ResetPasswordRequestDto();
+		request.setToken(token);
+		request.setNewPassword("NewPassword@123");
+		request.setConfirmPassword("NewPassword@123");
 		return request;
 	}
 
@@ -358,6 +471,17 @@ class AuthServiceTest {
 		refreshToken.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
 		refreshToken.setRevokedAt(revokedAt);
 		return refreshToken;
+	}
+
+	private PasswordResetToken passwordResetToken(User user, Instant expiresAt, LocalDateTime usedAt,
+			LocalDateTime invalidatedAt) {
+		PasswordResetToken passwordResetToken = new PasswordResetToken();
+		passwordResetToken.setUser(user);
+		passwordResetToken.setTokenHash("hashed-reset-token");
+		passwordResetToken.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
+		passwordResetToken.setUsedAt(usedAt);
+		passwordResetToken.setInvalidatedAt(invalidatedAt);
+		return passwordResetToken;
 	}
 
 	private Role role(Long id, String name) {
