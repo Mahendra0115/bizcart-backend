@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -37,6 +38,7 @@ class MySqlAuthenticationRepositoryIntegrationTest {
 	@Autowired VerificationTokenRepository verificationTokens;
 
 	@Test
+	@Transactional
 	void persistsOnlyVerificationTokenHashAndLocksByHash() {
 		User user = new User();
 		user.setFirstName("MySQL"); user.setLastName("Test"); user.setUsername("mysql-test");
