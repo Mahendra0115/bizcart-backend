@@ -3,3 +3,12 @@ spring:
     name: bizcart-backend
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+
+bizcart:
+  auth:
+    cleanup:
+      cron: ${AUTH_CLEANUP_CRON:0 0 3 * * *}
+      inactive-token-retention-days: ${AUTH_INACTIVE_TOKEN_RETENTION_DAYS:7}
+      login-attempt-retention-days: ${AUTH_LOGIN_ATTEMPT_RETENTION_DAYS:90}
+    proxy:
+      trusted-proxies: ${AUTH_TRUSTED_PROXIES:127.0.0.1,::1}

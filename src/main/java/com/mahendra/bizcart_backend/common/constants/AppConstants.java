@@ -163,6 +163,9 @@ public final class AppConstants {
 		public static final String LOGOUT_ALL_PATH = "/logout-all";
 		public static final String FORGOT_PASSWORD_PATH = "/forgot-password";
 		public static final String RESET_PASSWORD_PATH = "/reset-password";
+		public static final String VERIFY_EMAIL_PATH = "/verify-email";
+		public static final String RESEND_VERIFICATION_PATH = "/resend-verification";
+		public static final String CHANGE_PASSWORD_PATH = "/change-password";
 		public static final String REGISTER_SUCCESS = "User registered successfully";
 		public static final String LOGIN_SUCCESS = "Login successful";
 		public static final String CURRENT_USER_SUCCESS = "Current user fetched successfully";
@@ -172,6 +175,9 @@ public final class AppConstants {
 		public static final String LOGOUT_ALL_SUCCESS = "Logged out from all devices successfully";
 		public static final String FORGOT_PASSWORD_SUCCESS = "If the email is registered, a password reset link has been sent";
 		public static final String RESET_PASSWORD_SUCCESS = "Password reset successfully";
+		public static final String VERIFY_EMAIL_SUCCESS = "Email verified successfully";
+		public static final String RESEND_VERIFICATION_SUCCESS = "If the email is registered and unverified, a verification link has been sent";
+		public static final String CHANGE_PASSWORD_SUCCESS = "Password changed successfully";
 		public static final String DUPLICATE_EMAIL = "Email is already registered";
 		public static final String DUPLICATE_USERNAME = "Username is already registered";
 		public static final String INVALID_CREDENTIALS = "Invalid email or password";
@@ -180,6 +186,10 @@ public final class AppConstants {
 		public static final String REFRESH_TOKEN_REVOKED = "Refresh token revoked";
 		public static final String INVALID_RESET_TOKEN = "Invalid reset token";
 		public static final String RESET_TOKEN_EXPIRED = "Reset token expired";
+		public static final String INVALID_VERIFICATION_TOKEN = "Invalid verification token";
+		public static final String VERIFICATION_TOKEN_EXPIRED = "Verification token expired";
+		public static final String INVALID_CURRENT_PASSWORD = "Current password is incorrect";
+		public static final String NEW_PASSWORD_MUST_DIFFER = "New password must differ from current password";
 		public static final String ACCOUNT_NOT_ACTIVE = "Account is not active";
 		public static final String EMAIL_NOT_VERIFIED = "Email is not verified";
 		public static final String SELLER_NOT_APPROVED = "Seller account is not approved";

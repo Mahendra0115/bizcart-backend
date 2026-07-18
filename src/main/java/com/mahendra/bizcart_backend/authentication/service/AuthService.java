@@ -5,6 +5,7 @@ import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ChangePasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
@@ -14,8 +15,12 @@ import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
 import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
+import com.mahendra.bizcart_backend.authentication.notification.VerificationNotificationEvent;
 import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
+import com.mahendra.bizcart_backend.authentication.repository.VerificationTokenRepository;
+import com.mahendra.bizcart_backend.authentication.entity.VerificationToken;
+import com.mahendra.bizcart_backend.authentication.entity.VerificationType;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.Permission;
@@ -47,12 +52,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class AuthService {
 
 	private static final int REFRESH_TOKEN_BYTES = 64;
 	private static final int RESET_TOKEN_BYTES = 64;
+	private static final int VERIFICATION_TOKEN_BYTES = 64;
 
 	private final UserRepository userRepository;
 	private final RoleRepository roleRepository;
@@ -68,6 +75,8 @@ public class AuthService {
 	private final AuthenticationProperties authenticationProperties;
 	private final Clock clock;
 	private final SecureRandom secureRandom = new SecureRandom();
+	@Autowired
+	private VerificationTokenRepository verificationTokenRepository;
 
 	public AuthService(UserRepository userRepository, RoleRepository roleRepository,
 			PermissionRepository permissionRepository, UserRoleRepository userRoleRepository,
@@ -112,7 +121,56 @@ public class AuthService {
 
 		User savedUser = userRepository.save(user);
 		assignDefaultRole(savedUser, request.getUserType());
+		issueVerificationToken(savedUser);
 		return toRegisterResponse(savedUser);
+	}
+
+	@Transactional
+	public void verifyEmail(String rawToken) {
+		LocalDateTime now = LocalDateTime.now(clock);
+		VerificationToken token = verificationTokenRepository.findByTokenHashForUpdate(hashToken(rawToken))
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+					AppConstants.Auth.INVALID_VERIFICATION_TOKEN));
+		if (token.getVerifiedAt() != null || token.getInvalidatedAt() != null) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_VERIFICATION_TOKEN);
+		}
+		if (!token.getExpiresAt().isAfter(now)) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.VERIFICATION_TOKEN_EXPIRED);
+		}
+		User user = token.getUser();
+		user.setEmailVerified(true);
+		if (user.getUserType() == UserType.CUSTOMER && user.getStatus() == AccountStatus.PENDING) {
+			user.setStatus(AccountStatus.ACTIVE);
+		}
+		// A seller remains pending until the independent admin-approval workflow activates it.
+		token.setVerifiedAt(now);
+	}
+
+	@Transactional
+	public void resendVerification(String email) {
+		User user = userRepository.findByNormalizedEmail(normalizeEmail(email)).orElse(null);
+		if (user == null || user.isEmailVerified()) return;
+		LocalDateTime now = LocalDateTime.now(clock);
+		verificationTokenRepository.invalidateActiveTokensByUserIdAndType(user.getId(), VerificationType.EMAIL_VERIFICATION,
+				now, now);
+		issueVerificationToken(user);
+	}
+
+	@Transactional
+	public void changePassword(Long userId, ChangePasswordRequestDto request) {
+		User user = userRepository.findById(userId)
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_CREDENTIALS));
+		if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, AppConstants.Auth.INVALID_CURRENT_PASSWORD);
+		}
+		if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, AppConstants.Auth.NEW_PASSWORD_MUST_DIFFER);
+		}
+		user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+		user.setTokenVersion(user.getTokenVersion() + 1);
+		LocalDateTime now = LocalDateTime.now(clock);
+		refreshTokenRepository.revokeActiveTokensByUserId(userId, now,
+				RefreshTokenRevocationReason.PASSWORD_CHANGE, now);
 	}
 
 	@Transactional
@@ -209,6 +267,7 @@ public class AuthService {
 
 		User user = resetToken.getUser();
 		user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+		user.setTokenVersion(user.getTokenVersion() + 1);
 		resetToken.setUsedAt(now);
 		refreshTokenRepository.revokeActiveTokensByUserId(user.getId(), now, RefreshTokenRevocationReason.PASSWORD_RESET,
 				now);
@@ -330,6 +389,20 @@ public class AuthService {
 		passwordResetToken.setExpiresAt(LocalDateTime.ofInstant(Instant.now(clock)
 			.plusSeconds(authenticationProperties.getJwt().getPasswordResetTokenExpirySeconds()), clock.getZone()));
 		return passwordResetToken;
+	}
+
+	private void issueVerificationToken(User user) {
+		if (verificationTokenRepository == null) return; // Keeps isolated legacy unit construction compatible.
+		String rawToken = generateToken(VERIFICATION_TOKEN_BYTES);
+		VerificationToken token = new VerificationToken();
+		token.setUser(user);
+		token.setTokenHash(hashToken(rawToken));
+		token.setVerificationType(VerificationType.EMAIL_VERIFICATION);
+		token.setExpiresAt(LocalDateTime.ofInstant(clock.instant()
+			.plusSeconds(authenticationProperties.getJwt().getVerificationTokenExpirySeconds()), clock.getZone()));
+		verificationTokenRepository.save(token);
+		eventPublisher.publishEvent(new VerificationNotificationEvent(user.getId(), user.getEmail(),
+				user.getFirstName(), rawToken));
 	}
 
 	private void validatePasswordResetToken(PasswordResetToken resetToken, LocalDateTime now) {
