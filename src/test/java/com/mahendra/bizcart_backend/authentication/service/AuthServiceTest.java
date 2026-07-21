@@ -13,15 +13,20 @@ import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordReq
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ChangePasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
+import com.mahendra.bizcart_backend.authentication.entity.VerificationToken;
+import com.mahendra.bizcart_backend.authentication.entity.VerificationType;
 import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationEvent;
+import com.mahendra.bizcart_backend.authentication.notification.VerificationNotificationEvent;
 import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
+import com.mahendra.bizcart_backend.authentication.repository.VerificationTokenRepository;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.Permission;
@@ -73,6 +78,8 @@ class AuthServiceTest {
 
 	@Mock
 	private PasswordResetTokenRepository passwordResetTokenRepository;
+	@Mock
+	private VerificationTokenRepository verificationTokenRepository;
 
 	@Mock
 	private RefreshTokenRevocationService refreshTokenRevocationService;
@@ -102,6 +109,85 @@ class AuthServiceTest {
 				refreshTokenRepository, passwordResetTokenRepository, refreshTokenRevocationService, loginAttemptRecorder,
 				eventPublisher, passwordEncoder, jwtTokenProvider, authenticationProperties,
 				Clock.fixed(NOW, ZoneOffset.UTC));
+		ReflectionTestUtils.setField(authService, "verificationTokenRepository", verificationTokenRepository);
+	}
+
+	@Test
+	void verifyEmailActivatesPendingCustomerAndMarksTokenUsed() {
+		User user = user(55L, AccountStatus.PENDING, false);
+		VerificationToken token = verificationToken(user, NOW.plusSeconds(60), null, null);
+		when(verificationTokenRepository.findByTokenHashAndVerificationTypeForUpdate(any(String.class),
+				eq(VerificationType.EMAIL_VERIFICATION))).thenReturn(Optional.of(token));
+
+		authService.verifyEmail("raw-verification-token");
+
+		assertThat(user.isEmailVerified()).isTrue();
+		assertThat(user.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+		assertThat(token.getVerifiedAt()).isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+	}
+
+	@Test
+	void verifyEmailDoesNotActivateSellerWithoutAdminApproval() {
+		User seller = user(55L, AccountStatus.PENDING, false);
+		seller.setUserType(UserType.SELLER);
+		seller.setAdminApproved(false);
+		VerificationToken token = verificationToken(seller, NOW.plusSeconds(60), null, null);
+		when(verificationTokenRepository.findByTokenHashAndVerificationTypeForUpdate(any(String.class),
+				eq(VerificationType.EMAIL_VERIFICATION))).thenReturn(Optional.of(token));
+
+		authService.verifyEmail("seller-verification-token");
+
+		assertThat(seller.isEmailVerified()).isTrue();
+		assertThat(seller.getStatus()).isEqualTo(AccountStatus.PENDING);
+		assertThat(seller.isAdminApproved()).isFalse();
+	}
+
+	@Test
+	void verifyEmailRejectsExpiredAndReusedTokens() {
+		VerificationToken expired = verificationToken(user(55L, AccountStatus.PENDING, false),
+				NOW.minusSeconds(1), null, null);
+		when(verificationTokenRepository.findByTokenHashAndVerificationTypeForUpdate(any(String.class),
+				eq(VerificationType.EMAIL_VERIFICATION))).thenReturn(Optional.of(expired));
+		assertThatThrownBy(() -> authService.verifyEmail("expired-token"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.VERIFICATION_TOKEN_EXPIRED);
+
+		VerificationToken reused = verificationToken(user(56L, AccountStatus.PENDING, false),
+				NOW.plusSeconds(60), LocalDateTime.ofInstant(NOW.minusSeconds(1), ZoneOffset.UTC), null);
+		when(verificationTokenRepository.findByTokenHashAndVerificationTypeForUpdate(any(String.class),
+				eq(VerificationType.EMAIL_VERIFICATION))).thenReturn(Optional.of(reused));
+		assertThatThrownBy(() -> authService.verifyEmail("reused-token"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_VERIFICATION_TOKEN);
+	}
+
+	@Test
+	void resendVerificationInvalidatesPreviousTokenAndIssuesReplacement() {
+		User user = user(55L, AccountStatus.PENDING, false);
+		when(userRepository.findByNormalizedEmail("customer@example.com")).thenReturn(Optional.of(user));
+
+		authService.resendVerification(" Customer@Example.COM ");
+
+		verify(verificationTokenRepository).invalidateActiveTokensByUserIdAndType(eq(55L),
+				eq(VerificationType.EMAIL_VERIFICATION), any(LocalDateTime.class), any(LocalDateTime.class));
+		verify(verificationTokenRepository).save(any(VerificationToken.class));
+		verify(eventPublisher).publishEvent(any(VerificationNotificationEvent.class));
+	}
+
+	@Test
+	void changePasswordUpdatesVersionAndRevokesAllRefreshTokens() {
+		User user = user(55L, AccountStatus.ACTIVE, true);
+		when(userRepository.findById(55L)).thenReturn(Optional.of(user));
+		when(passwordEncoder.matches("CurrentPassword@123", "hashed-password")).thenReturn(true);
+		when(passwordEncoder.matches("NewPassword@123", "hashed-password")).thenReturn(false);
+		when(passwordEncoder.encode("NewPassword@123")).thenReturn("new-password-hash");
+
+		authService.changePassword(55L, changePasswordRequest());
+
+		assertThat(user.getPassword()).isEqualTo("new-password-hash");
+		assertThat(user.getTokenVersion()).isEqualTo(2L);
+		verify(refreshTokenRepository).revokeActiveTokensByUserId(eq(55L), any(LocalDateTime.class),
+				eq(RefreshTokenRevocationReason.PASSWORD_CHANGE), any(LocalDateTime.class));
 	}
 
 	@Test
@@ -446,6 +532,26 @@ class AuthServiceTest {
 		request.setNewPassword("NewPassword@123");
 		request.setConfirmPassword("NewPassword@123");
 		return request;
+	}
+
+	private ChangePasswordRequestDto changePasswordRequest() {
+		ChangePasswordRequestDto request = new ChangePasswordRequestDto();
+		request.setCurrentPassword("CurrentPassword@123");
+		request.setNewPassword("NewPassword@123");
+		request.setConfirmPassword("NewPassword@123");
+		return request;
+	}
+
+	private VerificationToken verificationToken(User user, Instant expiresAt, LocalDateTime verifiedAt,
+			LocalDateTime invalidatedAt) {
+		VerificationToken token = new VerificationToken();
+		token.setUser(user);
+		token.setTokenHash("hashed-verification-token");
+		token.setVerificationType(VerificationType.EMAIL_VERIFICATION);
+		token.setExpiresAt(LocalDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
+		token.setVerifiedAt(verifiedAt);
+		token.setInvalidatedAt(invalidatedAt);
+		return token;
 	}
 
 	private User user(Long id, AccountStatus status, boolean emailVerified) {

@@ -16,6 +16,9 @@ public class AuthenticationProperties {
 	private final TokenHash tokenHash = new TokenHash();
 	private final RefreshCookie refreshCookie = new RefreshCookie();
 	private final Notification notification = new Notification();
+	private final RateLimit rateLimit = new RateLimit();
+	private final Cleanup cleanup = new Cleanup();
+	private final Proxy proxy = new Proxy();
 
 	public Jwt getJwt() {
 		return jwt;
@@ -41,6 +44,10 @@ public class AuthenticationProperties {
 		return notification;
 	}
 
+	public RateLimit getRateLimit() { return rateLimit; }
+	public Cleanup getCleanup() { return cleanup; }
+	public Proxy getProxy() { return proxy; }
+
 	public static class Jwt {
 
 		@NotBlank
@@ -57,6 +64,8 @@ public class AuthenticationProperties {
 
 		@Min(1)
 		private long passwordResetTokenExpirySeconds = 900;
+		@Min(1)
+		private long verificationTokenExpirySeconds = 86400;
 
 		public String getSecret() {
 			return secret;
@@ -97,6 +106,55 @@ public class AuthenticationProperties {
 		public void setPasswordResetTokenExpirySeconds(long passwordResetTokenExpirySeconds) {
 			this.passwordResetTokenExpirySeconds = passwordResetTokenExpirySeconds;
 		}
+		public long getVerificationTokenExpirySeconds() { return verificationTokenExpirySeconds; }
+		public void setVerificationTokenExpirySeconds(long value) { this.verificationTokenExpirySeconds = value; }
+	}
+
+	public static class RateLimit {
+		private final Limit login = new Limit(10, 60);
+		private final Limit forgotPassword = new Limit(5, 3600);
+		private final Limit resetPassword = new Limit(10, 3600);
+		private final Limit resendVerification = new Limit(3, 3600);
+		private final Limit refreshToken = new Limit(30, 60);
+		@Min(1) private int maxBuckets = 100000;
+		public Limit getLogin() { return login; }
+		public Limit getForgotPassword() { return forgotPassword; }
+		public Limit getResetPassword() { return resetPassword; }
+		public Limit getResendVerification() { return resendVerification; }
+		public Limit getRefreshToken() { return refreshToken; }
+		public int getMaxBuckets() { return maxBuckets; }
+		public void setMaxBuckets(int value) { this.maxBuckets = value; }
+	}
+
+	public static class Limit {
+		@Min(1) private int maxRequests;
+		@Min(1) private long windowSeconds;
+		public Limit() { this(10, 60); }
+		public Limit(int maxRequests, long windowSeconds) {
+			this.maxRequests = maxRequests; this.windowSeconds = windowSeconds;
+		}
+		public int getMaxRequests() { return maxRequests; }
+		public void setMaxRequests(int value) { this.maxRequests = value; }
+		public long getWindowSeconds() { return windowSeconds; }
+		public void setWindowSeconds(long value) { this.windowSeconds = value; }
+	}
+
+	public static class Cleanup {
+		@NotBlank private String cron = "0 0 3 * * *";
+		@Min(1) private long inactiveTokenRetentionDays = 7;
+		@Min(1) private long loginAttemptRetentionDays = 90;
+		public String getCron() { return cron; }
+		public void setCron(String value) { this.cron = value; }
+		public long getInactiveTokenRetentionDays() { return inactiveTokenRetentionDays; }
+		public void setInactiveTokenRetentionDays(long value) { this.inactiveTokenRetentionDays = value; }
+		public long getLoginAttemptRetentionDays() { return loginAttemptRetentionDays; }
+		public void setLoginAttemptRetentionDays(long value) { this.loginAttemptRetentionDays = value; }
+	}
+
+	public static class Proxy {
+		private String trustedProxies = "127.0.0.1,::1";
+		public String getTrustedProxies() { return trustedProxies; }
+		public void setTrustedProxies(String value) { this.trustedProxies = value; }
 	}
 
 	public static class Password {
@@ -225,6 +283,10 @@ public class AuthenticationProperties {
 		private String passwordResetUrl = "http://localhost:5173/reset-password";
 
 		private String passwordResetSubject = AppConstants.Auth.PASSWORD_RESET_EMAIL_SUBJECT;
+		private String verificationProvider = AppConstants.Auth.NOTIFICATION_PROVIDER_NO_OP;
+		private String verificationFrom = "no-reply@bizcart.local";
+		private String verificationUrl = "http://localhost:5173/verify-email";
+		private String verificationSubject = "Verify your BizCart email";
 
 		public String getPasswordResetProvider() {
 			return passwordResetProvider;
@@ -257,5 +319,13 @@ public class AuthenticationProperties {
 		public void setPasswordResetSubject(String passwordResetSubject) {
 			this.passwordResetSubject = passwordResetSubject;
 		}
+		public String getVerificationProvider() { return verificationProvider; }
+		public void setVerificationProvider(String value) { this.verificationProvider = value; }
+		public String getVerificationFrom() { return verificationFrom; }
+		public void setVerificationFrom(String value) { this.verificationFrom = value; }
+		public String getVerificationUrl() { return verificationUrl; }
+		public void setVerificationUrl(String value) { this.verificationUrl = value; }
+		public String getVerificationSubject() { return verificationSubject; }
+		public void setVerificationSubject(String value) { this.verificationSubject = value; }
 	}
 }

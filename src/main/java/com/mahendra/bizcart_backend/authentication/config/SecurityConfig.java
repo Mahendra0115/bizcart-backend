@@ -42,6 +42,8 @@ public class SecurityConfig {
 	private static final String API_AUTH_ME = API_AUTH_BASE + "/me";
 	private static final String API_AUTH_CSRF = API_AUTH_BASE + "/csrf";
 	private static final String ACTUATOR_HEALTH = "/actuator/health/**";
+	private static final String OPENAPI = "/v3/api-docs/**";
+	private static final String SWAGGER = "/swagger-ui/**";
 	private static final String API_ADMIN = "/api/v1/admin/**";
 	private static final String API_SELLER = "/api/v1/seller/**";
 	private static final String API_CUSTOMER = "/api/v1/customer/**";
@@ -84,6 +86,7 @@ public class SecurityConfig {
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers(HttpMethod.OPTIONS, ALL_PATHS).permitAll()
 				.requestMatchers(ACTUATOR_HEALTH).permitAll()
+				.requestMatchers(OPENAPI, SWAGGER).permitAll()
 				.requestMatchers(HttpMethod.GET, API_AUTH_CSRF).permitAll()
 				.requestMatchers(HttpMethod.POST, API_AUTH_LOGIN, API_AUTH_REGISTER, API_AUTH_FORGOT_PASSWORD,
 						API_AUTH_RESEND_VERIFICATION, API_AUTH_REFRESH_TOKEN, API_AUTH_RESET_PASSWORD,

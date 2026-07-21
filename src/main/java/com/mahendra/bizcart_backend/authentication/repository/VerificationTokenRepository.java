@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,13 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
 			select vt
 			from VerificationToken vt
 			where vt.tokenHash = :tokenHash
+			""";
+
+	String FIND_BY_TOKEN_HASH_AND_TYPE = """
+			select vt
+			from VerificationToken vt
+			where vt.tokenHash = :tokenHash
+			  and vt.verificationType = :verificationType
 			""";
 
 	String FIND_VALID_UNVERIFIED_BY_TOKEN_HASH = """
@@ -47,10 +56,18 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
 	String DELETE_EXPIRED_TOKENS = """
 			delete from VerificationToken vt
 			where vt.expiresAt < :cutoff
+			   or vt.verifiedAt < :cutoff
+			   or vt.invalidatedAt < :cutoff
 			""";
 
 	@Query(FIND_BY_TOKEN_HASH)
 	Optional<VerificationToken> findByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query(FIND_BY_TOKEN_HASH_AND_TYPE)
+	Optional<VerificationToken> findByTokenHashAndVerificationTypeForUpdate(
+			@Param(PARAM_TOKEN_HASH) String tokenHash,
+			@Param(PARAM_VERIFICATION_TYPE) VerificationType verificationType);
 
 	@Query(FIND_VALID_UNVERIFIED_BY_TOKEN_HASH)
 	Optional<VerificationToken> findValidUnverifiedByTokenHash(@Param(PARAM_TOKEN_HASH) String tokenHash,

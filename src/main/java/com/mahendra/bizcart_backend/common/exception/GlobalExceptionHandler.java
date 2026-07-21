@@ -14,9 +14,12 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
@@ -48,6 +51,8 @@ public class GlobalExceptionHandler {
 			HttpServletRequest request) {
 		HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
 		String message = ex.getReason() == null ? status.getReasonPhrase() : ex.getReason();
+		log.warn("Authentication request failed status={} code={} path={}", status.value(),
+				authCode(status, message), request.getRequestURI());
 		return error(status, authCode(status, message), message, request.getRequestURI(), List.of());
 	}
 
@@ -75,6 +80,7 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiErrorResponse> handleUnexpectedException(Exception ex, HttpServletRequest request) {
+		log.error("Unexpected authentication request failure path={}", request.getRequestURI(), ex);
 		return error(HttpStatus.INTERNAL_SERVER_ERROR, AppConstants.Auth.AUTH_INTERNAL_ERROR,
 				AppConstants.Auth.INTERNAL_ERROR, request.getRequestURI(), List.of());
 	}

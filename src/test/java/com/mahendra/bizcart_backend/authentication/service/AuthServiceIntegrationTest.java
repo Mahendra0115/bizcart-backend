@@ -12,20 +12,25 @@ import static org.mockito.Mockito.verify;
 import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ChangePasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.entity.LoginAttempt;
 import com.mahendra.bizcart_backend.authentication.entity.PasswordResetToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshToken;
 import com.mahendra.bizcart_backend.authentication.entity.RefreshTokenRevocationReason;
 import com.mahendra.bizcart_backend.authentication.notification.PasswordResetNotificationService;
+import com.mahendra.bizcart_backend.authentication.notification.VerificationNotificationService;
 import com.mahendra.bizcart_backend.authentication.repository.LoginAttemptRepository;
 import com.mahendra.bizcart_backend.authentication.repository.PasswordResetTokenRepository;
 import com.mahendra.bizcart_backend.authentication.repository.RefreshTokenRepository;
+import com.mahendra.bizcart_backend.authentication.repository.VerificationTokenRepository;
 import com.mahendra.bizcart_backend.authentication.config.AuthenticationProperties;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
 import com.mahendra.bizcart_backend.user.repository.UserRepository;
+import com.mahendra.bizcart_backend.user.repository.UserRoleRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -64,6 +69,10 @@ class AuthServiceIntegrationTest {
 
 	@Autowired
 	private RefreshTokenRepository refreshTokenRepository;
+	@Autowired
+	private VerificationTokenRepository verificationTokenRepository;
+	@Autowired
+	private UserRoleRepository userRoleRepository;
 
 	@Autowired
 	private UserRepository userRepository;
@@ -76,6 +85,8 @@ class AuthServiceIntegrationTest {
 
 	@MockBean
 	private PasswordResetNotificationService passwordResetNotificationService;
+	@MockBean
+	private VerificationNotificationService verificationNotificationService;
 
 	@BeforeEach
 	@AfterEach
@@ -83,7 +94,57 @@ class AuthServiceIntegrationTest {
 		loginAttemptRepository.deleteAll();
 		passwordResetTokenRepository.deleteAll();
 		refreshTokenRepository.deleteAll();
+		verificationTokenRepository.deleteAll();
+		userRoleRepository.deleteAll();
 		userRepository.deleteAll();
+	}
+
+	@Test
+	void registerVerifyAndLoginCompletesCustomerOnboarding() {
+		authService.register(registerRequest());
+		ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
+		verify(verificationNotificationService).sendVerification(
+				org.mockito.ArgumentMatchers.eq("onboarding@example.com"),
+				org.mockito.ArgumentMatchers.eq("Onboarding"), tokenCaptor.capture());
+
+		authService.verifyEmail(tokenCaptor.getValue());
+		LoginRequestDto login = new LoginRequestDto();
+		login.setEmail("onboarding@example.com");
+		login.setPassword("Password@123");
+		LoginResult result = authService.login(login, "127.0.0.1", "JUnit");
+
+		User user = userRepository.findByNormalizedEmail("onboarding@example.com").orElseThrow();
+		assertThat(user.isEmailVerified()).isTrue();
+		assertThat(user.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+		assertThat(result.response().accessToken()).isNotBlank();
+		assertThat(result.refreshToken()).isNotBlank();
+		assertThat(refreshTokenRepository.findActiveByUserId(user.getId(), LocalDateTime.now(Clock.systemUTC())))
+			.hasSize(1);
+	}
+
+	@Test
+	void changePasswordRejectsOldPasswordAndRevokesExistingSession() {
+		User user = userRepository.save(activeVerifiedUser("change-password@example.com", "change-password"));
+		LoginRequestDto login = new LoginRequestDto();
+		login.setEmail(user.getEmail());
+		login.setPassword("Password@123");
+		LoginResult existingSession = authService.login(login, "127.0.0.1", "JUnit");
+		ChangePasswordRequestDto change = new ChangePasswordRequestDto();
+		change.setCurrentPassword("Password@123");
+		change.setNewPassword("NewPassword@123");
+		change.setConfirmPassword("NewPassword@123");
+
+		authService.changePassword(user.getId(), change);
+
+		assertThatThrownBy(() -> authService.login(login, "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.INVALID_CREDENTIALS);
+		assertThatThrownBy(() -> authService.refreshAccessToken(existingSession.refreshToken(), "127.0.0.1", "JUnit"))
+			.isInstanceOf(ResponseStatusException.class)
+			.hasMessageContaining(AppConstants.Auth.REFRESH_TOKEN_REVOKED);
+		User updated = userRepository.findById(user.getId()).orElseThrow();
+		assertThat(updated.getTokenVersion()).isEqualTo(2L);
+		assertThat(passwordEncoder.matches("NewPassword@123", updated.getPassword())).isTrue();
 	}
 
 	@Test
@@ -356,6 +417,19 @@ class AuthServiceIntegrationTest {
 		LoginRequestDto request = new LoginRequestDto();
 		request.setEmail(EMAIL);
 		request.setPassword("WrongPassword@123");
+		return request;
+	}
+
+	private RegisterRequestDto registerRequest() {
+		RegisterRequestDto request = new RegisterRequestDto();
+		request.setFirstName("Onboarding");
+		request.setLastName("Customer");
+		request.setUsername("onboarding-customer");
+		request.setEmail("onboarding@example.com");
+		request.setPhone("+919876543210");
+		request.setPassword("Password@123");
+		request.setConfirmPassword("Password@123");
+		request.setUserType(UserType.CUSTOMER);
 		return request;
 	}
 

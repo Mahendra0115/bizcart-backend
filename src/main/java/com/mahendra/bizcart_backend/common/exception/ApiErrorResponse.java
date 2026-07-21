@@ -11,5 +11,6 @@ public record ApiErrorResponse(
 		String code,
 		String message,
 		String path,
+		String correlationId,
 		List<FieldErrorResponse> fieldErrors) {
 }

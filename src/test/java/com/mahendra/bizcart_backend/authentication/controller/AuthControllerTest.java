@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,6 +16,7 @@ import com.mahendra.bizcart_backend.authentication.dto.request.ForgotPasswordReq
 import com.mahendra.bizcart_backend.authentication.dto.request.LoginRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.RegisterRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.request.ResetPasswordRequestDto;
+import com.mahendra.bizcart_backend.authentication.dto.request.ChangePasswordRequestDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.CurrentUserResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.LoginResponseDto;
 import com.mahendra.bizcart_backend.authentication.dto.response.RegisterResponseDto;
@@ -24,8 +26,10 @@ import com.mahendra.bizcart_backend.authentication.security.AuthenticatedUserDet
 import com.mahendra.bizcart_backend.authentication.security.CustomUserDetailsService;
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.service.LoginResult;
+import com.mahendra.bizcart_backend.authentication.service.AuthRateLimiter;
 import com.mahendra.bizcart_backend.authentication.service.AuthService;
 import com.mahendra.bizcart_backend.authentication.service.RefreshTokenResult;
+import com.mahendra.bizcart_backend.authentication.web.ClientIpResolver;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
@@ -68,6 +72,9 @@ class AuthControllerTest {
 
 	@MockBean
 	private CustomUserDetailsService customUserDetailsService;
+
+	@MockBean
+	private AuthRateLimiter authRateLimiter;
 
 	@Test
 	void registerReturnsWrappedRegisterResponse() throws Exception {
@@ -326,6 +333,47 @@ class AuthControllerTest {
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_RESET_TOKEN_EXPIRED));
 	}
 
+	@Test
+	void verifyEmailDelegatesTokenAndReturnsSuccess() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.VERIFY_EMAIL_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"raw-verification-token\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VERIFY_EMAIL_SUCCESS));
+
+		verify(authService).verifyEmail("raw-verification-token");
+	}
+
+	@Test
+	void resendVerificationAlwaysReturnsGenericSuccess() throws Exception {
+		mockMvc.perform(post(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.RESEND_VERIFICATION_PATH)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"unknown@example.com\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.RESEND_VERIFICATION_SUCCESS));
+
+		verify(authService).resendVerification("unknown@example.com");
+	}
+
+	@Test
+	void changePasswordUsesAuthenticatedUser() throws Exception {
+		AuthenticatedUserDetails principal = new AuthenticatedUserDetails(user(), List.of());
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+		try {
+			mockMvc.perform(put(AppConstants.Auth.API_AUTH_BASE + AppConstants.Auth.CHANGE_PASSWORD_PATH)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(changePasswordRequest())))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.message").value(AppConstants.Auth.CHANGE_PASSWORD_SUCCESS));
+		}
+		finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		verify(authService).changePassword(eq(55L), any(ChangePasswordRequestDto.class));
+	}
+
 	private RegisterRequestDto registerRequest() {
 		RegisterRequestDto request = new RegisterRequestDto();
 		request.setFirstName("Customer");
@@ -360,6 +408,14 @@ class AuthControllerTest {
 		return request;
 	}
 
+	private ChangePasswordRequestDto changePasswordRequest() {
+		ChangePasswordRequestDto request = new ChangePasswordRequestDto();
+		request.setCurrentPassword("Password@123");
+		request.setNewPassword("NewPassword@123");
+		request.setConfirmPassword("NewPassword@123");
+		return request;
+	}
+
 	private CurrentUserResponseDto currentUserResponse() {
 		return new CurrentUserResponseDto(55L, "Customer", "One", "customer-one", "customer@example.com",
 				"+919999999999", null, UserType.CUSTOMER, AccountStatus.ACTIVE, true,
@@ -389,6 +445,11 @@ class AuthControllerTest {
 			authenticationProperties.getJwt().setRefreshTokenExpirySeconds(604800);
 			authenticationProperties.getRefreshCookie().setSecure(false);
 			return authenticationProperties;
+		}
+
+		@Bean
+		ClientIpResolver clientIpResolver(AuthenticationProperties authenticationProperties) {
+			return new ClientIpResolver(authenticationProperties);
 		}
 	}
 }
