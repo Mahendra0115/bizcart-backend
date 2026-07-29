@@ -10,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -44,6 +45,13 @@ public class GlobalExceptionHandler {
 			.toList();
 		return error(HttpStatus.BAD_REQUEST, AppConstants.Auth.AUTH_VALIDATION_FAILED,
 				AppConstants.Auth.VALIDATION_FAILED, request.getRequestURI(), fieldErrors);
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
+			HttpServletRequest request) {
+		return error(HttpStatus.BAD_REQUEST, AppConstants.Auth.AUTH_VALIDATION_FAILED,
+				AppConstants.Auth.VALIDATION_FAILED, request.getRequestURI(), List.of());
 	}
 
 	@ExceptionHandler(ResponseStatusException.class)

@@ -38,8 +38,9 @@ public class UserProfileController {
 	@PatchMapping(AppConstants.User.PROFILE_PATH)
 	@Operation(summary = "Update the authenticated user's editable profile fields",
 			description = """
-					Updates only the supplied editable profile fields. Omitted fields are preserved. Sending phone or
-					profileImage as null or blank clears that field. Restricted account fields are ignored.
+					Updates only the supplied editable profile fields; at least one field is required. Omitted fields
+					are preserved. Sending phone or profileImage as null or blank clears that field. Unknown or
+					restricted account fields return 400.
 					""")
 	public UserResponseDto<UserProfileResponseDto> updateProfile(
 			@AuthenticationPrincipal AuthenticatedUserDetails authenticatedUser,

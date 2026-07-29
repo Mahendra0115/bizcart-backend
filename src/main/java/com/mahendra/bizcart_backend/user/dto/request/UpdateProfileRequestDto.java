@@ -1,16 +1,16 @@
 package com.mahendra.bizcart_backend.user.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 @Schema(description = """
 		Fields to change on the authenticated user's profile. Omitted fields are preserved. Sending phone or
-		profileImage as null or blank clears that field. Restricted account fields are ignored.
+		profileImage as null or blank clears that field. Unknown or restricted account fields are rejected.
 		""")
 public class UpdateProfileRequestDto {
 
@@ -32,7 +32,8 @@ public class UpdateProfileRequestDto {
 
 	@Size(max = AppConstants.FieldLengths.PROFILE_IMAGE,
 			message = "Profile image URL must not exceed 500 characters")
-	@Schema(description = "Profile image URL. Omit to preserve; send null/blank to clear",
+	@Pattern(regexp = "^\\s*$|^https://[^\\s]+$", message = "Profile image must be a valid HTTPS URL")
+	@Schema(description = "HTTPS profile image URL. Omit to preserve; send null/blank to clear",
 			example = "https://cdn.example.com/profiles/me.png", nullable = true)
 	private String profileImage;
 
@@ -105,5 +106,16 @@ public class UpdateProfileRequestDto {
 
 	public boolean isProfileImagePresent() {
 		return profileImagePresent;
+	}
+
+	@JsonIgnore
+	@AssertTrue(message = "At least one editable profile field must be supplied")
+	public boolean isAnyEditableFieldPresent() {
+		return firstNamePresent || lastNamePresent || phonePresent || profileImagePresent;
+	}
+
+	@JsonAnySetter
+	public void rejectUnknownField(String fieldName, Object value) {
+		throw new IllegalArgumentException("Unknown profile field: " + fieldName);
 	}
 }

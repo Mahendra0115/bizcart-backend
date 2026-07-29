@@ -1,6 +1,7 @@
 package com.mahendra.bizcart_backend.user.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -96,11 +97,7 @@ class UserProfileControllerTest {
 	}
 
 	@Test
-	void updateProfileRejectsRestrictedFieldsByIgnoringThem() throws Exception {
-		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", null, null);
-		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
-			.thenReturn(profile());
-
+	void updateProfileRejectsRestrictedFieldsWithBadRequest() throws Exception {
 		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
 						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
@@ -112,9 +109,45 @@ class UserProfileControllerTest {
 								  "status": "BLOCKED"
 								}
 								"""))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.email").value("user@example.com"))
-			.andExpect(jsonPath("$.data.status").value("ACTIVE"));
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VALIDATION_FAILED));
+
+		verifyNoInteractions(userProfileService);
+	}
+
+	@Test
+	void updateProfileRejectsNonHttpsProfileImageUrl() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "profileImage": "http://untrusted.example.com/profile.png"
+								}
+								"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.fieldErrors[0].field").value("profileImage"))
+			.andExpect(jsonPath("$.fieldErrors[0].message")
+				.value("Profile image must be a valid HTTPS URL"));
+
+		verifyNoInteractions(userProfileService);
+	}
+
+	@Test
+	void updateProfileRejectsEmptyPatchRequest() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.fieldErrors[0].field").value("anyEditableFieldPresent"))
+			.andExpect(jsonPath("$.fieldErrors[0].message")
+				.value("At least one editable profile field must be supplied"));
+
+		verifyNoInteractions(userProfileService);
 	}
 
 	@Test
