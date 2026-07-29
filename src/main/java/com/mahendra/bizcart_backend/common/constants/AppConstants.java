@@ -223,4 +223,19 @@ public final class AppConstants {
 		private Auth() {
 		}
 	}
+
+	public static final class User {
+
+		public static final String API_USERS_BASE = "/api/v1/users";
+		public static final String PROFILE_PATH = "/me/profile";
+		public static final String PROFILE_FETCH_SUCCESS = "User profile fetched successfully";
+		public static final String PROFILE_UPDATE_SUCCESS = "User profile updated successfully";
+		public static final String USER_NOT_FOUND = "User not found";
+		public static final String DUPLICATE_PHONE = "Phone number is already registered";
+		public static final String USER_NOT_FOUND_CODE = "USER_NOT_FOUND";
+		public static final String PHONE_ALREADY_EXISTS_CODE = "USER_PHONE_ALREADY_EXISTS";
+
+		private User() {
+		}
+	}
 }
