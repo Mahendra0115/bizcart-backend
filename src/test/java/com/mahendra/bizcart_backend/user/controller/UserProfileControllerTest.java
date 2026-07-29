@@ -1,9 +1,10 @@
 package com.mahendra.bizcart_backend.user.controller;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,6 +17,7 @@ import com.mahendra.bizcart_backend.user.dto.response.UserProfileResponseDto;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
 import com.mahendra.bizcart_backend.user.service.UserProfileService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,9 +76,10 @@ class UserProfileControllerTest {
 	void updateProfileValidatesAndReturnsUpdatedProfile() throws Exception {
 		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", "+919876543210",
 				"https://img.test/me.png");
-		when(userProfileService.updateProfile(1L, request)).thenReturn(profile());
+		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
+			.thenReturn(profile());
 
-		mockMvc.perform(put(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
 						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -95,9 +98,10 @@ class UserProfileControllerTest {
 	@Test
 	void updateProfileRejectsRestrictedFieldsByIgnoringThem() throws Exception {
 		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", null, null);
-		when(userProfileService.updateProfile(1L, request)).thenReturn(profile());
+		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
+			.thenReturn(profile());
 
-		mockMvc.perform(put(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
 						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -111,6 +115,27 @@ class UserProfileControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.email").value("user@example.com"))
 			.andExpect(jsonPath("$.data.status").value("ACTIVE"));
+	}
+
+	@Test
+	void updateProfileMapsDatabasePhoneConstraintRaceToConflict() throws Exception {
+		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", "+919876543210", null);
+		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
+			.thenThrow(new DataIntegrityViolationException("Duplicate entry for key 'ux_users_phone'"));
+
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "firstName": "Updated",
+								  "lastName": "User",
+								  "phone": "+919876543210"
+								}
+								"""))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value(AppConstants.User.PHONE_ALREADY_EXISTS_CODE))
+			.andExpect(jsonPath("$.message").value(AppConstants.User.DUPLICATE_PHONE));
 	}
 
 	private AuthenticatedUserDetails principal() {

@@ -68,6 +68,10 @@ public class GlobalExceptionHandler {
 			return error(HttpStatus.CONFLICT, AppConstants.Auth.AUTH_USERNAME_ALREADY_EXISTS,
 					AppConstants.Auth.DUPLICATE_USERNAME, request.getRequestURI(), List.of());
 		}
+		if (containsAny(detail, AppConstants.Indexes.UX_USERS_PHONE, "users.phone", "phone")) {
+			return error(HttpStatus.CONFLICT, AppConstants.User.PHONE_ALREADY_EXISTS_CODE,
+					AppConstants.User.DUPLICATE_PHONE, request.getRequestURI(), List.of());
+		}
 		return error(HttpStatus.CONFLICT, AppConstants.Auth.AUTH_CONFLICT, HttpStatus.CONFLICT.getReasonPhrase(),
 				request.getRequestURI(), List.of());
 	}

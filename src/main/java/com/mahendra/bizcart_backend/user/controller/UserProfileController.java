@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,8 +35,12 @@ public class UserProfileController {
 				userProfileService.getProfile(authenticatedUser.getId()));
 	}
 
-	@PutMapping(AppConstants.User.PROFILE_PATH)
-	@Operation(summary = "Update the authenticated user's editable profile fields")
+	@PatchMapping(AppConstants.User.PROFILE_PATH)
+	@Operation(summary = "Update the authenticated user's editable profile fields",
+			description = """
+					Updates only the supplied editable profile fields. Omitted fields are preserved. Sending phone or
+					profileImage as null or blank clears that field. Restricted account fields are ignored.
+					""")
 	public UserResponseDto<UserProfileResponseDto> updateProfile(
 			@AuthenticationPrincipal AuthenticatedUserDetails authenticatedUser,
 			@Valid @RequestBody UpdateProfileRequestDto request) {

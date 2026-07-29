@@ -84,6 +84,40 @@ class UserProfileServiceTest {
 	}
 
 	@Test
+	void updateProfilePreservesOmittedOptionalFields() {
+		User user = user();
+		when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+		when(userRepository.save(user)).thenReturn(user);
+
+		UpdateProfileRequestDto request = new UpdateProfileRequestDto();
+		request.setFirstName("Updated");
+		request.setLastName("User");
+		UserProfileResponseDto response = userProfileService.updateProfile(1L, request);
+
+		assertThat(response.phone()).isEqualTo("+911234567890");
+		assertThat(response.profileImage()).isEqualTo("https://img.test/original.png");
+		assertThat(user.getPhone()).isEqualTo("+911234567890");
+		assertThat(user.getProfileImage()).isEqualTo("https://img.test/original.png");
+		verify(userRepository, never()).existsByPhoneAndIdNot(org.mockito.ArgumentMatchers.anyString(),
+				org.mockito.ArgumentMatchers.anyLong());
+	}
+
+	@Test
+	void updateProfileClearsOptionalFieldsWhenExplicitlyNull() {
+		User user = user();
+		when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+		when(userRepository.save(user)).thenReturn(user);
+		UpdateProfileRequestDto request = new UpdateProfileRequestDto();
+		request.setPhone(null);
+		request.setProfileImage(null);
+
+		UserProfileResponseDto response = userProfileService.updateProfile(1L, request);
+
+		assertThat(response.phone()).isNull();
+		assertThat(response.profileImage()).isNull();
+	}
+
+	@Test
 	void getProfileReturnsNotFoundWhenAuthenticatedUserNoLongerExists() {
 		when(userRepository.findById(99L)).thenReturn(Optional.empty());
 

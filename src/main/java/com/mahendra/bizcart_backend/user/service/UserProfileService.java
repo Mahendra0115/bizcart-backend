@@ -28,15 +28,23 @@ public class UserProfileService {
 	@Transactional
 	public UserProfileResponseDto updateProfile(Long userId, UpdateProfileRequestDto request) {
 		User user = findUser(userId);
-		String phone = normalizeNullable(request.phone());
-		if (phone != null && userRepository.existsByPhoneAndIdNot(phone, userId)) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, AppConstants.User.DUPLICATE_PHONE);
+		if (request.isFirstNamePresent() && request.getFirstName() != null) {
+			user.setFirstName(request.getFirstName().trim());
+		}
+		if (request.isLastNamePresent() && request.getLastName() != null) {
+			user.setLastName(request.getLastName().trim());
+		}
+		if (request.isPhonePresent()) {
+			String phone = normalizeNullable(request.getPhone());
+			if (phone != null && userRepository.existsByPhoneAndIdNot(phone, userId)) {
+				throw new ResponseStatusException(HttpStatus.CONFLICT, AppConstants.User.DUPLICATE_PHONE);
+			}
+			user.setPhone(phone);
+		}
+		if (request.isProfileImagePresent()) {
+			user.setProfileImage(normalizeNullable(request.getProfileImage()));
 		}
 
-		user.setFirstName(request.firstName().trim());
-		user.setLastName(request.lastName().trim());
-		user.setPhone(phone);
-		user.setProfileImage(normalizeNullable(request.profileImage()));
 		return toResponse(userRepository.save(user));
 	}
 
