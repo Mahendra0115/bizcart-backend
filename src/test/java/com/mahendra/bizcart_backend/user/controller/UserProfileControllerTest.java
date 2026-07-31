@@ -1,0 +1,189 @@
+package com.mahendra.bizcart_backend.user.controller;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.mahendra.bizcart_backend.authentication.security.AuthenticatedUserDetails;
+import com.mahendra.bizcart_backend.authentication.security.CustomUserDetailsService;
+import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
+import com.mahendra.bizcart_backend.common.constants.AppConstants;
+import com.mahendra.bizcart_backend.user.dto.request.UpdateProfileRequestDto;
+import com.mahendra.bizcart_backend.user.dto.response.UserProfileResponseDto;
+import com.mahendra.bizcart_backend.user.enums.AccountStatus;
+import com.mahendra.bizcart_backend.user.enums.UserType;
+import com.mahendra.bizcart_backend.user.service.UserProfileService;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(UserProfileController.class)
+@AutoConfigureMockMvc(addFilters = false)
+class UserProfileControllerTest {
+
+	@Autowired
+	private MockMvc mockMvc;
+
+	@MockitoBean
+	private UserProfileService userProfileService;
+
+	@MockBean
+	private JwtTokenProvider jwtTokenProvider;
+
+	@MockBean
+	private CustomUserDetailsService customUserDetailsService;
+
+	@BeforeEach
+	void authenticate() {
+		AuthenticatedUserDetails principal = principal();
+		SecurityContextHolder.getContext()
+			.setAuthentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+	}
+
+	@AfterEach
+	void clearAuthentication() {
+		SecurityContextHolder.clearContext();
+	}
+
+	@Test
+	void getProfileReturnsAuthenticatedUsersProfile() throws Exception {
+		when(userProfileService.getProfile(1L)).thenReturn(profile());
+
+		mockMvc.perform(get(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.User.PROFILE_FETCH_SUCCESS))
+			.andExpect(jsonPath("$.data.id").value(1))
+			.andExpect(jsonPath("$.data.password").doesNotExist())
+			.andExpect(jsonPath("$.data.tokenVersion").doesNotExist());
+	}
+
+	@Test
+	void updateProfileValidatesAndReturnsUpdatedProfile() throws Exception {
+		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", "+919876543210",
+				"https://img.test/me.png");
+		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
+			.thenReturn(profile());
+
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "firstName": "Updated",
+								  "lastName": "User",
+								  "phone": "+919876543210",
+								  "profileImage": "https://img.test/me.png"
+								}
+								"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.message").value(AppConstants.User.PROFILE_UPDATE_SUCCESS))
+			.andExpect(jsonPath("$.data.email").value("user@example.com"));
+	}
+
+	@Test
+	void updateProfileRejectsRestrictedFieldsWithBadRequest() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "firstName": "Updated",
+								  "lastName": "User",
+								  "email": "attacker@example.com",
+								  "status": "BLOCKED"
+								}
+								"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VALIDATION_FAILED));
+
+		verifyNoInteractions(userProfileService);
+	}
+
+	@Test
+	void updateProfileRejectsNonHttpsProfileImageUrl() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "profileImage": "http://untrusted.example.com/profile.png"
+								}
+								"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.fieldErrors[0].field").value("profileImage"))
+			.andExpect(jsonPath("$.fieldErrors[0].message")
+				.value("Profile image must be a valid HTTPS URL"));
+
+		verifyNoInteractions(userProfileService);
+	}
+
+	@Test
+	void updateProfileRejectsEmptyPatchRequest() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
+			.andExpect(jsonPath("$.fieldErrors[0].field").value("anyEditableFieldPresent"))
+			.andExpect(jsonPath("$.fieldErrors[0].message")
+				.value("At least one editable profile field must be supplied"));
+
+		verifyNoInteractions(userProfileService);
+	}
+
+	@Test
+	void updateProfileMapsDatabasePhoneConstraintRaceToConflict() throws Exception {
+		UpdateProfileRequestDto request = new UpdateProfileRequestDto("Updated", "User", "+919876543210", null);
+		when(userProfileService.updateProfile(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProfileRequestDto.class)))
+			.thenThrow(new DataIntegrityViolationException("Duplicate entry for key 'ux_users_phone'"));
+
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "firstName": "Updated",
+								  "lastName": "User",
+								  "phone": "+919876543210"
+								}
+								"""))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value(AppConstants.User.PHONE_ALREADY_EXISTS_CODE))
+			.andExpect(jsonPath("$.message").value(AppConstants.User.DUPLICATE_PHONE));
+	}
+
+	private AuthenticatedUserDetails principal() {
+		com.mahendra.bizcart_backend.user.entity.User user = new com.mahendra.bizcart_backend.user.entity.User();
+		ReflectionTestUtils.setField(user, "id", 1L);
+		user.setEmail("user@example.com");
+		user.setPassword("encoded");
+		user.setUserType(UserType.CUSTOMER);
+		user.setStatus(AccountStatus.ACTIVE);
+		user.setEmailVerified(true);
+		return new AuthenticatedUserDetails(user, java.util.List.of());
+	}
+
+	private UserProfileResponseDto profile() {
+		return new UserProfileResponseDto(1L, "Updated", "User", "bizcart-user", "user@example.com",
+				"+919876543210", "https://img.test/me.png", UserType.CUSTOMER, AccountStatus.ACTIVE, true, false);
+	}
+}

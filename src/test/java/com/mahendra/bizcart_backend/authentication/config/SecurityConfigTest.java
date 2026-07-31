@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -15,9 +16,11 @@ import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.security.RestAccessDeniedHandler;
 import com.mahendra.bizcart_backend.authentication.security.RestAuthenticationEntryPoint;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
+import com.mahendra.bizcart_backend.user.controller.UserProfileController;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
+import com.mahendra.bizcart_backend.user.service.UserProfileService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -39,10 +42,11 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = SecurityTestController.class)
+@WebMvcTest(controllers = { SecurityTestController.class, UserProfileController.class })
 @Import({
 		SecurityConfig.class,
 		JwtAuthenticationFilter.class,
@@ -58,7 +62,7 @@ import org.springframework.test.web.servlet.MockMvc;
 		"bizcart.auth.token-hash.secret=test-token-hash-0123456789abcdef0123456789abcdef",
 		"bizcart.auth.jwt.access-token-expiry-seconds=900",
 		"bizcart.auth.cors.allowed-origins=http://localhost:3000",
-		"bizcart.auth.cors.allowed-methods=GET,POST,OPTIONS",
+		"bizcart.auth.cors.allowed-methods=GET,POST,PATCH,OPTIONS",
 		"bizcart.auth.cors.allowed-headers=Authorization,Content-Type,X-XSRF-TOKEN",
 		"bizcart.auth.cors.allow-credentials=true"
 })
@@ -74,6 +78,9 @@ class SecurityConfigTest {
 
 	@Autowired
 	private TestUserDetailsService testUserDetailsService;
+
+	@MockitoBean
+	private UserProfileService userProfileService;
 
 	@BeforeEach
 	void setUp() {
@@ -120,6 +127,58 @@ class SecurityConfigTest {
 	void protectedAuthEndpointRequiresToken() throws Exception {
 		mockMvc.perform(get("/api/v1/auth/me"))
 			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void userProfileViewRequiresAuthenticationThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(get(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void userProfileUpdateRequiresAuthenticationThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH).with(csrf())
+				.contentType("application/json")
+				.content("""
+						{
+						  "firstName": "Security",
+						  "lastName": "Test"
+						}
+						"""))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void userProfileViewAcceptsValidJwtThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(get(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER")))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void userProfileUpdateAcceptsValidJwtAndCsrfThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH).with(csrf())
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER"))
+				.contentType("application/json")
+				.content("""
+						{
+						  "firstName": "Security"
+						}
+						"""))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void userProfileUpdateRequiresCsrfWithValidJwt() throws Exception {
+		mockMvc.perform(patch(AppConstants.User.API_USERS_BASE + AppConstants.User.PROFILE_PATH)
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER"))
+				.contentType("application/json")
+				.content("""
+						{
+						  "firstName": "Security"
+						}
+						"""))
+			.andExpect(status().isForbidden());
 	}
 
 	@Test

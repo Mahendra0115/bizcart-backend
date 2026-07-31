@@ -10,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -46,6 +47,13 @@ public class GlobalExceptionHandler {
 				AppConstants.Auth.VALIDATION_FAILED, request.getRequestURI(), fieldErrors);
 	}
 
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
+			HttpServletRequest request) {
+		return error(HttpStatus.BAD_REQUEST, AppConstants.Auth.AUTH_VALIDATION_FAILED,
+				AppConstants.Auth.VALIDATION_FAILED, request.getRequestURI(), List.of());
+	}
+
 	@ExceptionHandler(ResponseStatusException.class)
 	public ResponseEntity<ApiErrorResponse> handleResponseStatusException(ResponseStatusException ex,
 			HttpServletRequest request) {
@@ -67,6 +75,10 @@ public class GlobalExceptionHandler {
 		if (containsAny(detail, AppConstants.Indexes.UX_USERS_USERNAME, "users.username", "username")) {
 			return error(HttpStatus.CONFLICT, AppConstants.Auth.AUTH_USERNAME_ALREADY_EXISTS,
 					AppConstants.Auth.DUPLICATE_USERNAME, request.getRequestURI(), List.of());
+		}
+		if (containsAny(detail, AppConstants.Indexes.UX_USERS_PHONE, "users.phone", "phone")) {
+			return error(HttpStatus.CONFLICT, AppConstants.User.PHONE_ALREADY_EXISTS_CODE,
+					AppConstants.User.DUPLICATE_PHONE, request.getRequestURI(), List.of());
 		}
 		return error(HttpStatus.CONFLICT, AppConstants.Auth.AUTH_CONFLICT, HttpStatus.CONFLICT.getReasonPhrase(),
 				request.getRequestURI(), List.of());
@@ -91,6 +103,12 @@ public class GlobalExceptionHandler {
 	}
 
 	private String authCode(HttpStatus status, String message) {
+		if (status == HttpStatus.NOT_FOUND && AppConstants.User.USER_NOT_FOUND.equals(message)) {
+			return AppConstants.User.USER_NOT_FOUND_CODE;
+		}
+		if (status == HttpStatus.CONFLICT && AppConstants.User.DUPLICATE_PHONE.equals(message)) {
+			return AppConstants.User.PHONE_ALREADY_EXISTS_CODE;
+		}
 		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.INVALID_CREDENTIALS.equals(message)) {
 			return AppConstants.Auth.AUTH_INVALID_CREDENTIALS;
 		}

@@ -1,6 +1,7 @@
 package com.mahendra.bizcart_backend.authentication.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mahendra.bizcart_backend.authentication.entity.VerificationToken;
 import com.mahendra.bizcart_backend.authentication.entity.VerificationType;
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,5 +55,28 @@ class MySqlAuthenticationRepositoryIntegrationTest {
 		assertThat(verificationTokens.findByTokenHash("sha256-hash-only")).isPresent();
 		assertThat(verificationTokens.findByTokenHashAndVerificationTypeForUpdate(
 				"sha256-hash-only", VerificationType.EMAIL_VERIFICATION)).isPresent();
+	}
+
+	@Test
+	void databaseRejectsDuplicateUserPhoneNumbers() {
+		users.saveAndFlush(user("phone-user-one", "phone-one@example.com", "+919876543210"));
+
+		assertThatThrownBy(() ->
+				users.saveAndFlush(user("phone-user-two", "phone-two@example.com", "+919876543210")))
+			.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	private User user(String username, String email, String phone) {
+		User user = new User();
+		user.setFirstName("MySQL");
+		user.setLastName("Phone Test");
+		user.setUsername(username);
+		user.setEmail(email);
+		user.setPhone(phone);
+		user.setPassword("$2a$12$hash");
+		user.setUserType(UserType.CUSTOMER);
+		user.setStatus(AccountStatus.ACTIVE);
+		user.setEmailVerified(true);
+		return user;
 	}
 }
