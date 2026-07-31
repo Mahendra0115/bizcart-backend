@@ -91,6 +91,12 @@ public class GlobalExceptionHandler {
 	}
 
 	private String authCode(HttpStatus status, String message) {
+		if (status == HttpStatus.NOT_FOUND && AppConstants.Address.NOT_FOUND.equals(message)) {
+			return AppConstants.Address.NOT_FOUND_CODE;
+		}
+		if (status == HttpStatus.NOT_FOUND && AppConstants.Address.USER_NOT_FOUND.equals(message)) {
+			return AppConstants.Address.USER_NOT_FOUND_CODE;
+		}
 		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.INVALID_CREDENTIALS.equals(message)) {
 			return AppConstants.Auth.AUTH_INVALID_CREDENTIALS;
 		}
