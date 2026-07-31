@@ -102,7 +102,7 @@ public class AddressService {
 
 	private User lockUser(Long userId) {
 		return userRepository.findByIdForUpdate(userId)
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, AppConstants.Address.USER_NOT_FOUND));
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, AppConstants.User.USER_NOT_FOUND));
 	}
 
 	private Address findOwnedActiveAddress(Long userId, Long addressId) {
