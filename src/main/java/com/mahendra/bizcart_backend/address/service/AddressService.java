@@ -1,5 +1,6 @@
 package com.mahendra.bizcart_backend.address.service;
 
+import com.mahendra.bizcart_backend.address.config.AddressProperties;
 import com.mahendra.bizcart_backend.address.dto.request.CreateAddressRequestDto;
 import com.mahendra.bizcart_backend.address.dto.request.UpdateAddressRequestDto;
 import com.mahendra.bizcart_backend.address.dto.response.AddressResponseDto;
@@ -21,19 +22,24 @@ public class AddressService {
 	private final AddressRepository addressRepository;
 	private final UserRepository userRepository;
 	private final AddressMapper addressMapper;
+	private final AddressProperties addressProperties;
 
 	public AddressService(AddressRepository addressRepository, UserRepository userRepository,
-			AddressMapper addressMapper) {
+			AddressMapper addressMapper, AddressProperties addressProperties) {
 		this.addressRepository = addressRepository;
 		this.userRepository = userRepository;
 		this.addressMapper = addressMapper;
+		this.addressProperties = addressProperties;
 	}
 
 	@Transactional
 	public AddressResponseDto create(Long userId, CreateAddressRequestDto request) {
 		User user = lockUser(userId);
-		boolean makeDefault = request.defaultAddress()
-				|| addressRepository.countByUserIdAndDeletedFalse(userId) == 0;
+		long activeAddressCount = addressRepository.countByUserIdAndDeletedFalse(userId);
+		if (activeAddressCount >= addressProperties.getMaxActiveAddresses()) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, AppConstants.Address.LIMIT_EXCEEDED);
+		}
+		boolean makeDefault = request.defaultAddress() || activeAddressCount == 0;
 		if (makeDefault) {
 			addressRepository.clearDefaultAddresses(userId);
 		}

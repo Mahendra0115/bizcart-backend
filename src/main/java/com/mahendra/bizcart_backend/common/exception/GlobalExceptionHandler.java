@@ -106,6 +106,9 @@ public class GlobalExceptionHandler {
 		if (status == HttpStatus.NOT_FOUND && AppConstants.Address.NOT_FOUND.equals(message)) {
 			return AppConstants.Address.NOT_FOUND_CODE;
 		}
+		if (status == HttpStatus.CONFLICT && AppConstants.Address.LIMIT_EXCEEDED.equals(message)) {
+			return AppConstants.Address.LIMIT_EXCEEDED_CODE;
+		}
 		if (status == HttpStatus.NOT_FOUND && AppConstants.User.USER_NOT_FOUND.equals(message)) {
 			return AppConstants.User.USER_NOT_FOUND_CODE;
 		}

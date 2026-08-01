@@ -36,7 +36,7 @@ public class AddressMapper {
 			String landmark, String city, String state, String postalCode, String country,
 			AddressType addressType) {
 		address.setFullName(fullName.trim());
-		address.setPhone(phone.trim());
+		address.setPhone(normalizeIndianPhone(phone));
 		address.setAddressLine1(addressLine1.trim());
 		address.setAddressLine2(normalizeNullable(addressLine2));
 		address.setLandmark(normalizeNullable(landmark));
@@ -49,5 +49,10 @@ public class AddressMapper {
 
 	private String normalizeNullable(String value) {
 		return StringUtils.hasText(value) ? value.trim() : null;
+	}
+
+	private String normalizeIndianPhone(String phone) {
+		String normalized = phone.trim();
+		return normalized.startsWith("+91") ? normalized : "+91" + normalized;
 	}
 }

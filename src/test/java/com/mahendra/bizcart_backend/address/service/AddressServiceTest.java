@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.mahendra.bizcart_backend.address.config.AddressProperties;
 import com.mahendra.bizcart_backend.address.dto.request.CreateAddressRequestDto;
 import com.mahendra.bizcart_backend.address.dto.request.UpdateAddressRequestDto;
 import com.mahendra.bizcart_backend.address.dto.response.AddressResponseDto;
@@ -35,10 +36,11 @@ class AddressServiceTest {
 
 	private AddressService service;
 	private final AddressMapper mapper = new AddressMapper();
+	private final AddressProperties properties = new AddressProperties();
 
 	@BeforeEach
 	void setUp() {
-		service = new AddressService(addressRepository, userRepository, mapper);
+		service = new AddressService(addressRepository, userRepository, mapper, properties);
 	}
 
 	@Test
@@ -66,6 +68,21 @@ class AddressServiceTest {
 
 		assertThat(response.defaultAddress()).isFalse();
 		verify(addressRepository, never()).clearDefaultAddresses(1L);
+	}
+
+	@Test
+	void createRejectsAddressWhenActiveLimitIsReached() {
+		when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L)));
+		when(addressRepository.countByUserIdAndDeletedFalse(1L)).thenReturn(20L);
+
+		assertThatThrownBy(() -> service.create(1L, createRequest(false)))
+			.isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+				assertThat(exception.getReason()).isEqualTo(AppConstants.Address.LIMIT_EXCEEDED);
+			});
+
+		verify(addressRepository, never()).clearDefaultAddresses(1L);
+		verify(addressRepository, never()).save(org.mockito.ArgumentMatchers.any(Address.class));
 	}
 
 	@Test

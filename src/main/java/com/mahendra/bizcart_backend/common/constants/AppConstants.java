@@ -271,6 +271,8 @@ public final class AppConstants {
 		public static final String DEFAULT_UPDATE_SUCCESS = "Default address updated successfully";
 		public static final String NOT_FOUND = "Address not found";
 		public static final String NOT_FOUND_CODE = "ADDRESS_NOT_FOUND";
+		public static final String LIMIT_EXCEEDED = "Maximum active address limit reached";
+		public static final String LIMIT_EXCEEDED_CODE = "ADDRESS_LIMIT_EXCEEDED";
 
 		private Address() {
 		}
