@@ -19,10 +19,12 @@ import com.mahendra.bizcart_backend.address.controller.AddressController;
 import com.mahendra.bizcart_backend.address.service.AddressService;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.controller.UserProfileController;
+import com.mahendra.bizcart_backend.user.controller.AccountStatusController;
 import com.mahendra.bizcart_backend.user.entity.User;
 import com.mahendra.bizcart_backend.user.enums.AccountStatus;
 import com.mahendra.bizcart_backend.user.enums.UserType;
 import com.mahendra.bizcart_backend.user.service.UserProfileService;
+import com.mahendra.bizcart_backend.user.service.AccountStatusService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -48,7 +50,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = { SecurityTestController.class, UserProfileController.class, AddressController.class })
+@WebMvcTest(controllers = { SecurityTestController.class, UserProfileController.class, AddressController.class,
+		AccountStatusController.class })
 @Import({
 		SecurityConfig.class,
 		JwtAuthenticationFilter.class,
@@ -86,6 +89,9 @@ class SecurityConfigTest {
 
 	@MockitoBean
 	private AddressService addressService;
+
+	@MockitoBean
+	private AccountStatusService accountStatusService;
 
 	@BeforeEach
 	void setUp() {
@@ -256,6 +262,38 @@ class SecurityConfigTest {
 		mockMvc.perform(get("/api/v1/admin/dashboard")
 				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("ADMIN")))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void userAccountStatusEndpointRequiresAdminRole() throws Exception {
+		String path = "/api/v1/admin/users/202/status";
+		String body = "{\"status\":\"INACTIVE\"}";
+		mockMvc.perform(patch(path).with(csrf()).contentType("application/json").content(body))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(patch(path).with(csrf())
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER"))
+				.contentType("application/json").content(body))
+			.andExpect(status().isForbidden());
+
+		testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER,
+				AccountStatus.ACTIVE, true, 1L), List.of("ROLE_ADMIN"));
+		mockMvc.perform(patch(path).with(csrf())
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("ADMIN"))
+				.contentType("application/json").content(body))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void blockedOrDeactivatedUsersOldJwtFailsOnNextRequest() throws Exception {
+		String oldToken = token("CUSTOMER");
+		for (AccountStatus statusAfterChange : List.of(AccountStatus.BLOCKED, AccountStatus.INACTIVE)) {
+			testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER,
+					statusAfterChange, true, 2L), List.of("ROLE_CUSTOMER"));
+			mockMvc.perform(get("/api/v1/auth/me")
+					.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + oldToken))
+				.andExpect(status().isUnauthorized());
+		}
 	}
 
 	@Test

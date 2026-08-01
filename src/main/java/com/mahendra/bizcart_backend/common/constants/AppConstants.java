@@ -17,6 +17,7 @@ public final class AppConstants {
 		public static final String VERIFICATION_TOKENS = "verification_tokens";
 		public static final String LOGIN_ATTEMPTS = "login_attempts";
 		public static final String ADDRESSES = "addresses";
+		public static final String USER_STATUS_HISTORY = "user_status_history";
 
 		private Tables() {
 		}
@@ -73,6 +74,12 @@ public final class AppConstants {
 		public static final String ADDRESS_TYPE = "address_type";
 		public static final String DEFAULT_ADDRESS = "default_address";
 		public static final String DELETED = "deleted";
+		public static final String ADMIN_USER_ID = "admin_user_id";
+		public static final String TARGET_USER_ID = "target_user_id";
+		public static final String OLD_STATUS = "old_status";
+		public static final String NEW_STATUS = "new_status";
+		public static final String REASON = "reason";
+		public static final String CHANGED_AT = "changed_at";
 
 		private Columns() {
 		}
@@ -113,6 +120,8 @@ public final class AppConstants {
 		public static final String IX_ADDRESSES_USER_ID = "ix_addresses_user_id";
 		public static final String IX_ADDRESSES_USER_DEFAULT = "ix_addresses_user_default";
 		public static final String IX_ADDRESSES_USER_DELETED = "ix_addresses_user_deleted";
+		public static final String IX_USER_STATUS_HISTORY_TARGET_CHANGED = "ix_user_status_history_target_changed";
+		public static final String IX_USER_STATUS_HISTORY_ADMIN_CHANGED = "ix_user_status_history_admin_changed";
 
 		private Indexes() {
 		}
@@ -131,6 +140,8 @@ public final class AppConstants {
 		public static final String FK_VERIFICATION_TOKENS_USER = "fk_verification_tokens_user";
 		public static final String FK_LOGIN_ATTEMPTS_USER = "fk_login_attempts_user";
 		public static final String FK_ADDRESSES_USER = "fk_addresses_user";
+		public static final String FK_USER_STATUS_HISTORY_TARGET = "fk_user_status_history_target";
+		public static final String FK_USER_STATUS_HISTORY_ADMIN = "fk_user_status_history_admin";
 
 		private Constraints() {
 		}
@@ -249,12 +260,25 @@ public final class AppConstants {
 
 		public static final String API_USERS_BASE = "/api/v1/users";
 		public static final String PROFILE_PATH = "/me/profile";
+		public static final String API_ADMIN_BASE = "/api/v1/admin";
+		public static final String ADMIN_STATUS_PATH = "/users/{userId}/status";
 		public static final String PROFILE_FETCH_SUCCESS = "User profile fetched successfully";
 		public static final String PROFILE_UPDATE_SUCCESS = "User profile updated successfully";
+		public static final String STATUS_UPDATE_SUCCESS = "User status updated successfully";
 		public static final String USER_NOT_FOUND = "User not found";
 		public static final String DUPLICATE_PHONE = "Phone number is already registered";
+		public static final String INVALID_STATUS_TRANSITION = "Invalid user status transition";
+		public static final String SELF_STATUS_CHANGE_FORBIDDEN = "Admin cannot block or deactivate own account";
+		public static final String BLOCK_REASON_REQUIRED = "Reason is required when blocking a user";
+		public static final String EMAIL_VERIFICATION_REQUIRED = "Email verification is required before activation";
+		public static final String SELLER_APPROVAL_REQUIRED = "Seller approval is required before activation";
 		public static final String USER_NOT_FOUND_CODE = "USER_NOT_FOUND";
 		public static final String PHONE_ALREADY_EXISTS_CODE = "USER_PHONE_ALREADY_EXISTS";
+		public static final String INVALID_STATUS_TRANSITION_CODE = "USER_INVALID_STATUS_TRANSITION";
+		public static final String SELF_STATUS_CHANGE_FORBIDDEN_CODE = "USER_SELF_STATUS_CHANGE_FORBIDDEN";
+		public static final String BLOCK_REASON_REQUIRED_CODE = "USER_BLOCK_REASON_REQUIRED";
+		public static final String EMAIL_VERIFICATION_REQUIRED_CODE = "USER_EMAIL_VERIFICATION_REQUIRED";
+		public static final String SELLER_APPROVAL_REQUIRED_CODE = "USER_SELLER_APPROVAL_REQUIRED";
 
 		private User() {
 		}
