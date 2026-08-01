@@ -115,6 +115,12 @@ public class GlobalExceptionHandler {
 		if (status == HttpStatus.CONFLICT && AppConstants.User.DUPLICATE_PHONE.equals(message)) {
 			return AppConstants.User.PHONE_ALREADY_EXISTS_CODE;
 		}
+		if (status == HttpStatus.BAD_REQUEST && AppConstants.User.INVALID_STATUS_TRANSITION.equals(message)) {
+			return AppConstants.User.INVALID_STATUS_TRANSITION_CODE;
+		}
+		if (status == HttpStatus.FORBIDDEN && AppConstants.User.SELF_STATUS_CHANGE_FORBIDDEN.equals(message)) {
+			return AppConstants.User.SELF_STATUS_CHANGE_FORBIDDEN_CODE;
+		}
 		if (status == HttpStatus.UNAUTHORIZED && AppConstants.Auth.INVALID_CREDENTIALS.equals(message)) {
 			return AppConstants.Auth.AUTH_INVALID_CREDENTIALS;
 		}

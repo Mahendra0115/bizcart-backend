@@ -249,12 +249,20 @@ public final class AppConstants {
 
 		public static final String API_USERS_BASE = "/api/v1/users";
 		public static final String PROFILE_PATH = "/me/profile";
+		public static final String ADMIN_STATUS_PATH = "/admin/users/{userId}/status";
+		public static final String API_USERS_ADMIN = API_USERS_BASE + "/admin/**";
 		public static final String PROFILE_FETCH_SUCCESS = "User profile fetched successfully";
 		public static final String PROFILE_UPDATE_SUCCESS = "User profile updated successfully";
+		public static final String STATUS_UPDATE_SUCCESS = "User status updated successfully";
 		public static final String USER_NOT_FOUND = "User not found";
 		public static final String DUPLICATE_PHONE = "Phone number is already registered";
+		public static final String INVALID_STATUS_TRANSITION = "Invalid user status transition";
+		public static final String SELF_STATUS_CHANGE_FORBIDDEN = "Admin cannot block or deactivate own account";
+		public static final String BLOCK_REASON_REQUIRED = "Reason is required when blocking a user";
 		public static final String USER_NOT_FOUND_CODE = "USER_NOT_FOUND";
 		public static final String PHONE_ALREADY_EXISTS_CODE = "USER_PHONE_ALREADY_EXISTS";
+		public static final String INVALID_STATUS_TRANSITION_CODE = "USER_INVALID_STATUS_TRANSITION";
+		public static final String SELF_STATUS_CHANGE_FORBIDDEN_CODE = "USER_SELF_STATUS_CHANGE_FORBIDDEN";
 
 		private User() {
 		}
