@@ -68,10 +68,6 @@ public class AddressService {
 	public AddressResponseDto update(Long userId, Long addressId, UpdateAddressRequestDto request) {
 		lockUser(userId);
 		Address address = findOwnedActiveAddress(userId, addressId);
-		if (request.defaultAddress() && !address.isDefaultAddress()) {
-			addressRepository.clearDefaultAddresses(userId);
-			address.setDefaultAddress(true);
-		}
 		addressMapper.update(address, request);
 		return addressMapper.toResponse(addressRepository.save(address));
 	}

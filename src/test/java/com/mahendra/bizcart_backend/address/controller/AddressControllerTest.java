@@ -70,6 +70,11 @@ class AddressControllerTest {
 	}
 
 	@Test
+	void updateRejectsDefaultAddressField() throws Exception {
+		assertUpdateRejectsExtraField("\"defaultAddress\": true");
+	}
+
+	@Test
 	void createRejectsUnknownTypoField() throws Exception {
 		assertCreateRejectsExtraField("\"adressLine1\": \"typo\"");
 	}
@@ -80,7 +85,7 @@ class AddressControllerTest {
 		mockMvc.perform(post(AppConstants.Address.API_BASE)
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(addressJson(postalCode, "")))
+					.content(addressJson(postalCode, "", true)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.fieldErrors[0].field").value("postalCode"))
@@ -96,7 +101,7 @@ class AddressControllerTest {
 		mockMvc.perform(put(AppConstants.Address.API_BASE + "/1")
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(addressJson(postalCode, "")))
+					.content(addressJson(postalCode, "", false)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.fieldErrors[0].field").value("postalCode"))
@@ -112,7 +117,7 @@ class AddressControllerTest {
 		mockMvc.perform(post(AppConstants.Address.API_BASE)
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(addressJson("201309", "").replace("+919876543210", phone)))
+					.content(addressJson("201309", "", true).replace("+919876543210", phone)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.fieldErrors[0].field").value("phone"))
@@ -128,7 +133,7 @@ class AddressControllerTest {
 		mockMvc.perform(put(AppConstants.Address.API_BASE + "/1")
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(addressJson("201309", "").replace("+919876543210", phone)))
+					.content(addressJson("201309", "", false).replace("+919876543210", phone)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.fieldErrors[0].field").value("phone"))
@@ -142,7 +147,7 @@ class AddressControllerTest {
 		mockMvc.perform(post(AppConstants.Address.API_BASE)
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(validAddressJson(extraField)))
+					.content(addressJson("201309", ",\n  " + extraField, true)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VALIDATION_FAILED));
@@ -154,7 +159,7 @@ class AddressControllerTest {
 		mockMvc.perform(put(AppConstants.Address.API_BASE + "/1")
 					.with(csrf())
 					.contentType(MediaType.APPLICATION_JSON)
-					.content(validAddressJson(extraField)))
+					.content(addressJson("201309", ",\n  " + extraField, false)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value(AppConstants.Auth.AUTH_VALIDATION_FAILED))
 			.andExpect(jsonPath("$.message").value(AppConstants.Auth.VALIDATION_FAILED));
@@ -162,11 +167,8 @@ class AddressControllerTest {
 		verifyNoInteractions(addressService);
 	}
 
-	private String validAddressJson(String extraField) {
-		return addressJson("201309", ",\n  " + extraField);
-	}
-
-	private String addressJson(String postalCode, String extraJson) {
+	private String addressJson(String postalCode, String extraJson, boolean includeDefaultAddress) {
+		String defaultAddressJson = includeDefaultAddress ? ",\n  \"defaultAddress\": false" : "";
 		return """
 				{
 				  "fullName": "Test Customer",
@@ -176,10 +178,9 @@ class AddressControllerTest {
 				  "state": "Uttar Pradesh",
 				  "postalCode": "%s",
 				  "country": "India",
-				  "addressType": "HOME",
-				  "defaultAddress": false%s
+				  "addressType": "HOME"%s%s
 				}
-				""".formatted(postalCode, extraJson);
+				""".formatted(postalCode, defaultAddressJson, extraJson);
 	}
 
 	private AuthenticatedUserDetails principal() {

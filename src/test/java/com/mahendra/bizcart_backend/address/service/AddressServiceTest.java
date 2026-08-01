@@ -97,16 +97,31 @@ class AddressServiceTest {
 	}
 
 	@Test
-	void updateCanSetOwnedAddressAsDefaultTransactionally() {
-		Address address = address(10L, user(1L), false);
+	void updatePreservesDefaultStatusAndDoesNotSwitchDefaults() {
+		Address address = address(10L, user(1L), true);
 		when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(address.getUser()));
 		when(addressRepository.findByIdAndUserIdAndDeletedFalse(10L, 1L)).thenReturn(Optional.of(address));
 		when(addressRepository.save(address)).thenReturn(address);
 
-		AddressResponseDto response = service.update(1L, 10L, updateRequest(true));
+		AddressResponseDto response = service.update(1L, 10L, updateRequest());
 
 		assertThat(response.defaultAddress()).isTrue();
-		verify(addressRepository).clearDefaultAddresses(1L);
+		verify(addressRepository, never()).clearDefaultAddresses(1L);
+	}
+
+	@Test
+	void updateDoesNotExposeOrModifyAnotherUsersAddress() {
+		when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L)));
+		when(addressRepository.findByIdAndUserIdAndDeletedFalse(10L, 1L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.update(1L, 10L, updateRequest()))
+			.isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+				assertThat(exception.getReason()).isEqualTo(AppConstants.Address.NOT_FOUND);
+			});
+
+		verify(addressRepository, never()).save(org.mockito.ArgumentMatchers.any(Address.class));
+		verify(addressRepository, never()).clearDefaultAddresses(1L);
 	}
 
 	@Test
@@ -129,6 +144,21 @@ class AddressServiceTest {
 	}
 
 	@Test
+	void deleteDoesNotExposeOrModifyAnotherUsersAddress() {
+		when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L)));
+		when(addressRepository.findByIdAndUserIdAndDeletedFalse(10L, 1L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.delete(1L, 10L))
+			.isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+				assertThat(exception.getReason()).isEqualTo(AppConstants.Address.NOT_FOUND);
+			});
+
+		verify(addressRepository, never()).saveAndFlush(org.mockito.ArgumentMatchers.any(Address.class));
+		verify(addressRepository, never()).save(org.mockito.ArgumentMatchers.any(Address.class));
+	}
+
+	@Test
 	void setDefaultIsIdempotentForCurrentDefault() {
 		User user = user(1L);
 		Address address = address(10L, user, true);
@@ -140,6 +170,21 @@ class AddressServiceTest {
 		assertThat(response.defaultAddress()).isTrue();
 		verify(addressRepository, never()).clearDefaultAddresses(1L);
 		verify(addressRepository, never()).save(address);
+	}
+
+	@Test
+	void setDefaultDoesNotExposeOrModifyAnotherUsersAddress() {
+		when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user(1L)));
+		when(addressRepository.findByIdAndUserIdAndDeletedFalse(10L, 1L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.setDefault(1L, 10L))
+			.isInstanceOfSatisfying(ResponseStatusException.class, exception -> {
+				assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+				assertThat(exception.getReason()).isEqualTo(AppConstants.Address.NOT_FOUND);
+			});
+
+		verify(addressRepository, never()).clearDefaultAddresses(1L);
+		verify(addressRepository, never()).save(org.mockito.ArgumentMatchers.any(Address.class));
 	}
 
 	@Test
@@ -161,9 +206,9 @@ class AddressServiceTest {
 				"Electronic City", "Noida", "Uttar Pradesh", "201309", "India", AddressType.HOME, defaultAddress);
 	}
 
-	private UpdateAddressRequestDto updateRequest(boolean defaultAddress) {
+	private UpdateAddressRequestDto updateRequest() {
 		return new UpdateAddressRequestDto("Updated Customer", "+919876543211", "B-102 Sector 62", null,
-				null, "Noida", "Uttar Pradesh", "201309", "India", AddressType.WORK, defaultAddress);
+				null, "Noida", "Uttar Pradesh", "201309", "India", AddressType.WORK);
 	}
 
 	private User user(Long id) {

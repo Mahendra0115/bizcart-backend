@@ -22,8 +22,7 @@ public record UpdateAddressRequestDto(
 		@Pattern(regexp = "^[1-9][0-9]{5}$",
 				message = "Postal code must be a valid 6-digit Indian PIN code") String postalCode,
 		@NotBlank @Size(max = AppConstants.FieldLengths.COUNTRY) String country,
-		@NotNull AddressType addressType,
-		boolean defaultAddress
+		@NotNull AddressType addressType
 ) {
 	@JsonAnySetter
 	public void rejectUnknownField(String fieldName, Object value) {

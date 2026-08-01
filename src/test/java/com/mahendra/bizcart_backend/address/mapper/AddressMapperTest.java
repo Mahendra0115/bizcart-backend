@@ -42,6 +42,6 @@ class AddressMapperTest {
 
 	private UpdateAddressRequestDto updateRequest(String phone) {
 		return new UpdateAddressRequestDto("Test Customer", phone, "B-101 Sector 62", null, null,
-				"Noida", "Uttar Pradesh", "201309", "India", AddressType.HOME, false);
+				"Noida", "Uttar Pradesh", "201309", "India", AddressType.HOME);
 	}
 }
