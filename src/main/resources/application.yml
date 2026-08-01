@@ -5,6 +5,8 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
 bizcart:
+  address:
+    max-active-addresses: ${ADDRESS_MAX_ACTIVE_ADDRESSES:20}
   auth:
     rate-limit:
       max-buckets: ${AUTH_RATE_LIMIT_MAX_BUCKETS:100000}

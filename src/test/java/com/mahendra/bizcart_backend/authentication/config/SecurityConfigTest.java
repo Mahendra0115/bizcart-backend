@@ -15,6 +15,8 @@ import com.mahendra.bizcart_backend.authentication.security.JwtAuthenticationFil
 import com.mahendra.bizcart_backend.authentication.security.JwtTokenProvider;
 import com.mahendra.bizcart_backend.authentication.security.RestAccessDeniedHandler;
 import com.mahendra.bizcart_backend.authentication.security.RestAuthenticationEntryPoint;
+import com.mahendra.bizcart_backend.address.controller.AddressController;
+import com.mahendra.bizcart_backend.address.service.AddressService;
 import com.mahendra.bizcart_backend.common.constants.AppConstants;
 import com.mahendra.bizcart_backend.user.controller.UserProfileController;
 import com.mahendra.bizcart_backend.user.entity.User;
@@ -46,7 +48,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = { SecurityTestController.class, UserProfileController.class })
+@WebMvcTest(controllers = { SecurityTestController.class, UserProfileController.class, AddressController.class })
 @Import({
 		SecurityConfig.class,
 		JwtAuthenticationFilter.class,
@@ -81,6 +83,9 @@ class SecurityConfigTest {
 
 	@MockitoBean
 	private UserProfileService userProfileService;
+
+	@MockitoBean
+	private AddressService addressService;
 
 	@BeforeEach
 	void setUp() {
@@ -127,6 +132,33 @@ class SecurityConfigTest {
 	void protectedAuthEndpointRequiresToken() throws Exception {
 		mockMvc.perform(get("/api/v1/auth/me"))
 			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void userAddressEndpointsRequireAuthenticationThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(get(AppConstants.Address.API_BASE))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void userAddressCreateAcceptsValidJwtAndCsrfThroughSecurityFilterChain() throws Exception {
+		mockMvc.perform(post(AppConstants.Address.API_BASE).with(csrf())
+				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER"))
+				.contentType("application/json")
+				.content("""
+						{
+						  "fullName": "Security Test",
+						  "phone": "+919876543210",
+						  "addressLine1": "B-101 Sector 62",
+						  "city": "Noida",
+						  "state": "Uttar Pradesh",
+						  "postalCode": "201309",
+						  "country": "India",
+						  "addressType": "HOME",
+						  "defaultAddress": true
+						}
+						"""))
+			.andExpect(status().isCreated());
 	}
 
 	@Test

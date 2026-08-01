@@ -16,6 +16,7 @@ public final class AppConstants {
 		public static final String PASSWORD_RESET_TOKENS = "password_reset_tokens";
 		public static final String VERIFICATION_TOKENS = "verification_tokens";
 		public static final String LOGIN_ATTEMPTS = "login_attempts";
+		public static final String ADDRESSES = "addresses";
 
 		private Tables() {
 		}
@@ -61,6 +62,17 @@ public final class AppConstants {
 		public static final String WAS_SUCCESSFUL = "was_successful";
 		public static final String FAILURE_REASON = "failure_reason";
 		public static final String ATTEMPTED_AT = "attempted_at";
+		public static final String FULL_NAME = "full_name";
+		public static final String ADDRESS_LINE_1 = "address_line_1";
+		public static final String ADDRESS_LINE_2 = "address_line_2";
+		public static final String LANDMARK = "landmark";
+		public static final String CITY = "city";
+		public static final String STATE = "state";
+		public static final String POSTAL_CODE = "postal_code";
+		public static final String COUNTRY = "country";
+		public static final String ADDRESS_TYPE = "address_type";
+		public static final String DEFAULT_ADDRESS = "default_address";
+		public static final String DELETED = "deleted";
 
 		private Columns() {
 		}
@@ -98,6 +110,9 @@ public final class AppConstants {
 		public static final String IX_LOGIN_ATTEMPTS_IP_ADDRESS = "ix_login_attempts_ip_address";
 		public static final String IX_LOGIN_ATTEMPTS_ATTEMPTED_AT = "ix_login_attempts_attempted_at";
 		public static final String IX_LOGIN_ATTEMPTS_EMAIL_ATTEMPTED = "ix_login_attempts_email_attempted";
+		public static final String IX_ADDRESSES_USER_ID = "ix_addresses_user_id";
+		public static final String IX_ADDRESSES_USER_DEFAULT = "ix_addresses_user_default";
+		public static final String IX_ADDRESSES_USER_DELETED = "ix_addresses_user_deleted";
 
 		private Indexes() {
 		}
@@ -115,6 +130,7 @@ public final class AppConstants {
 		public static final String FK_PASSWORD_RESET_TOKENS_USER = "fk_password_reset_tokens_user";
 		public static final String FK_VERIFICATION_TOKENS_USER = "fk_verification_tokens_user";
 		public static final String FK_LOGIN_ATTEMPTS_USER = "fk_login_attempts_user";
+		public static final String FK_ADDRESSES_USER = "fk_addresses_user";
 
 		private Constraints() {
 		}
@@ -136,6 +152,12 @@ public final class AppConstants {
 		public static final int FAILURE_REASON = 255;
 		public static final int DESCRIPTION = 500;
 		public static final int ENUM = 50;
+		public static final int ADDRESS_LINE = 255;
+		public static final int LANDMARK = 150;
+		public static final int CITY = 100;
+		public static final int STATE = 100;
+		public static final int POSTAL_CODE = 20;
+		public static final int COUNTRY = 100;
 
 		private FieldLengths() {
 		}
@@ -223,7 +245,6 @@ public final class AppConstants {
 		private Auth() {
 		}
 	}
-
 	public static final class User {
 
 		public static final String API_USERS_BASE = "/api/v1/users";
@@ -236,6 +257,24 @@ public final class AppConstants {
 		public static final String PHONE_ALREADY_EXISTS_CODE = "USER_PHONE_ALREADY_EXISTS";
 
 		private User() {
+		}
+	}
+
+	public static final class Address {
+
+		public static final String API_BASE = "/api/v1/users/me/addresses";
+		public static final String CREATED_SUCCESS = "Address created successfully";
+		public static final String LIST_FETCH_SUCCESS = "Addresses fetched successfully";
+		public static final String FETCH_SUCCESS = "Address fetched successfully";
+		public static final String UPDATE_SUCCESS = "Address updated successfully";
+		public static final String DELETE_SUCCESS = "Address deleted successfully";
+		public static final String DEFAULT_UPDATE_SUCCESS = "Default address updated successfully";
+		public static final String NOT_FOUND = "Address not found";
+		public static final String NOT_FOUND_CODE = "ADDRESS_NOT_FOUND";
+		public static final String LIMIT_EXCEEDED = "Maximum active address limit reached";
+		public static final String LIMIT_EXCEEDED_CODE = "ADDRESS_LIMIT_EXCEEDED";
+
+		private Address() {
 		}
 	}
 }
