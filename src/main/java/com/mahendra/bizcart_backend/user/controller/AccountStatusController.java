@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(AppConstants.User.API_USERS_BASE)
+@RequestMapping(AppConstants.User.API_ADMIN_BASE)
 @Tag(name = "User Account Status", description = "Admin-controlled user account status management")
 public class AccountStatusController {
 

@@ -266,8 +266,11 @@ class SecurityConfigTest {
 
 	@Test
 	void userAccountStatusEndpointRequiresAdminRole() throws Exception {
-		String path = "/api/v1/users/admin/users/202/status";
+		String path = "/api/v1/admin/users/202/status";
 		String body = "{\"status\":\"INACTIVE\"}";
+		mockMvc.perform(patch(path).with(csrf()).contentType("application/json").content(body))
+			.andExpect(status().isUnauthorized());
+
 		mockMvc.perform(patch(path).with(csrf())
 				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("CUSTOMER"))
 				.contentType("application/json").content(body))
@@ -279,6 +282,18 @@ class SecurityConfigTest {
 				.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + token("ADMIN"))
 				.contentType("application/json").content(body))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void blockedOrDeactivatedUsersOldJwtFailsOnNextRequest() throws Exception {
+		String oldToken = token("CUSTOMER");
+		for (AccountStatus statusAfterChange : List.of(AccountStatus.BLOCKED, AccountStatus.INACTIVE)) {
+			testUserDetailsService.setCurrentUser(user(101L, "security@example.com", UserType.CUSTOMER,
+					statusAfterChange, true, 2L), List.of("ROLE_CUSTOMER"));
+			mockMvc.perform(get("/api/v1/auth/me")
+					.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + oldToken))
+				.andExpect(status().isUnauthorized());
+		}
 	}
 
 	@Test

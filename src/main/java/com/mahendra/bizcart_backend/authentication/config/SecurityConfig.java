@@ -95,7 +95,6 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.POST, API_AUTH_LOGOUT_ALL).authenticated()
 				.requestMatchers(HttpMethod.PUT, API_AUTH_CHANGE_PASSWORD).authenticated()
 				.requestMatchers(HttpMethod.GET, API_AUTH_ME).authenticated()
-				.requestMatchers(AppConstants.User.API_USERS_ADMIN).hasRole(ROLE_ADMIN)
 				.requestMatchers(API_ADMIN).hasRole(ROLE_ADMIN)
 				.requestMatchers(API_SELLER).hasAnyRole(ROLE_ADMIN, ROLE_SELLER)
 				.requestMatchers(API_CUSTOMER).hasAnyRole(ROLE_ADMIN, ROLE_CUSTOMER)

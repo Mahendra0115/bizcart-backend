@@ -118,6 +118,15 @@ public class GlobalExceptionHandler {
 		if (status == HttpStatus.BAD_REQUEST && AppConstants.User.INVALID_STATUS_TRANSITION.equals(message)) {
 			return AppConstants.User.INVALID_STATUS_TRANSITION_CODE;
 		}
+		if (status == HttpStatus.BAD_REQUEST && AppConstants.User.BLOCK_REASON_REQUIRED.equals(message)) {
+			return AppConstants.User.BLOCK_REASON_REQUIRED_CODE;
+		}
+		if (status == HttpStatus.BAD_REQUEST && AppConstants.User.EMAIL_VERIFICATION_REQUIRED.equals(message)) {
+			return AppConstants.User.EMAIL_VERIFICATION_REQUIRED_CODE;
+		}
+		if (status == HttpStatus.BAD_REQUEST && AppConstants.User.SELLER_APPROVAL_REQUIRED.equals(message)) {
+			return AppConstants.User.SELLER_APPROVAL_REQUIRED_CODE;
+		}
 		if (status == HttpStatus.FORBIDDEN && AppConstants.User.SELF_STATUS_CHANGE_FORBIDDEN.equals(message)) {
 			return AppConstants.User.SELF_STATUS_CHANGE_FORBIDDEN_CODE;
 		}
