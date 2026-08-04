@@ -92,6 +92,9 @@ public class AdminUserService {
 	private void replaceRoles(User user, Set<Long> roleIds) {
 		List<Role> selected = roleIds.stream().map(roleId -> roles.findById(roleId)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Role not found: " + roleId))).toList();
+		if (selected.stream().noneMatch(role -> "ADMIN".equals(role.getName()))) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An admin user must have the ADMIN role");
+		}
 		userRoles.deleteByUserId(user.getId());
 		for (Role role : selected) { UserRole mapping = new UserRole(); mapping.setUser(user); mapping.setRole(role); userRoles.save(mapping); }
 	}
