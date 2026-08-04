@@ -1,0 +1,30 @@
+package com.mahendra.bizcart_backend.admin.controller;
+
+import com.mahendra.bizcart_backend.admin.dto.ApiResponse;
+import com.mahendra.bizcart_backend.admin.dto.RoleRequest;
+import com.mahendra.bizcart_backend.admin.dto.RoleResponse;
+import com.mahendra.bizcart_backend.admin.service.RbacService;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/admin/roles")
+public class RoleController {
+	private final RbacService service;
+	public RoleController(RbacService service) { this.service = service; }
+	@PostMapping @ResponseStatus(HttpStatus.CREATED) public ApiResponse<RoleResponse> create(@Valid @RequestBody RoleRequest request) { return new ApiResponse<>("Role created successfully", service.createRole(request)); }
+	@GetMapping public ApiResponse<List<RoleResponse>> list() { return new ApiResponse<>("Roles fetched successfully", service.listRoles()); }
+	@GetMapping("/{id}") public ApiResponse<RoleResponse> get(@PathVariable Long id) { return new ApiResponse<>("Role fetched successfully", service.getRole(id)); }
+	@PutMapping("/{id}") public ApiResponse<RoleResponse> update(@PathVariable Long id, @Valid @RequestBody RoleRequest request) { return new ApiResponse<>("Role updated successfully", service.updateRole(id, request)); }
+	@DeleteMapping("/{id}") public ApiResponse<Void> delete(@PathVariable Long id) { service.deleteRole(id); return new ApiResponse<>("Role deleted successfully", null); }
+}

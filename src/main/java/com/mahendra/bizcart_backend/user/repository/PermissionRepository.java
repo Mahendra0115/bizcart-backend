@@ -42,4 +42,6 @@ public interface PermissionRepository extends JpaRepository<Permission, Long> {
 
 	@Query(FIND_BY_USER_ID)
 	List<Permission> findByUserId(@Param(PARAM_USER_ID) Long userId);
+
+	List<Permission> findAllByOrderByNameAsc();
 }

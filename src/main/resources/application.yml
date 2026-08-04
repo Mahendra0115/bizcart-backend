@@ -5,6 +5,14 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
 bizcart:
+	admin:
+		bootstrap:
+			enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+			first-name: ${ADMIN_BOOTSTRAP_FIRST_NAME:System}
+			last-name: ${ADMIN_BOOTSTRAP_LAST_NAME:Admin}
+			username: ${ADMIN_BOOTSTRAP_USERNAME:admin}
+			email: ${ADMIN_BOOTSTRAP_EMAIL:}
+			password: ${ADMIN_BOOTSTRAP_PASSWORD:}
   address:
     max-active-addresses: ${ADDRESS_MAX_ACTIVE_ADDRESSES:20}
   auth:
