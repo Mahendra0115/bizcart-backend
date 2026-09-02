@@ -30,4 +30,6 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
 
 	@Query(FIND_BY_USER_ID)
 	List<Role> findByUserId(@Param(PARAM_USER_ID) Long userId);
+
+	List<Role> findAllByOrderByNameAsc();
 }
