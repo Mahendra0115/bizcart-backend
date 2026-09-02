@@ -26,18 +26,24 @@ public class AdminBootstrapInitializer {
 			AdminBootstrapProperties properties, PasswordEncoder encoder) {
 		return args -> {
 			Role adminRole = ensureRole(roles, "ADMIN", "Platform administrator");
+			Role superAdminRole = ensureRole(roles, "SUPER_ADMIN", "Platform super administrator");
 			ensureRole(roles, "CUSTOMER", "Customer account"); ensureRole(roles, "SELLER", "Seller account");
 			for (String name : new String[] { "ADMIN_USERS_READ", "ADMIN_USERS_WRITE", "ROLES_READ", "ROLES_WRITE",
 					"PERMISSIONS_READ", "PERMISSIONS_WRITE" }) {
 				grant(rolePermissions, adminRole, ensurePermission(permissions, name));
 			}
+			grant(rolePermissions, superAdminRole, ensurePermission(permissions, "ADMIN_ROLE_ASSIGN"));
 			if (!properties.isEnabled() || !StringUtils.hasText(properties.getEmail()) || !StringUtils.hasText(properties.getPassword())) return;
+			// Bootstrap is a one-time recovery path. Never create another administrator once one exists.
+			if (users.existsByUserType(UserType.ADMIN)) return;
 			if (users.existsByEmail(properties.getEmail().trim().toLowerCase())) return;
+			if (users.existsByUsername(value(properties.getUsername(), "admin").toLowerCase())) return;
 			User user = new User(); user.setFirstName(value(properties.getFirstName(), "System")); user.setLastName(value(properties.getLastName(), "Admin"));
 			user.setUsername(value(properties.getUsername(), "admin").toLowerCase()); user.setEmail(properties.getEmail().trim().toLowerCase());
 			user.setPassword(encoder.encode(properties.getPassword())); user.setUserType(UserType.ADMIN); user.setStatus(AccountStatus.ACTIVE);
 			user.setEmailVerified(true); user.setAdminApproved(true); user.setTokenVersion(0L); user = users.save(user);
 			UserRole mapping = new UserRole(); mapping.setUser(user); mapping.setRole(adminRole); userRoles.save(mapping);
+			UserRole superAdminMapping = new UserRole(); superAdminMapping.setUser(user); superAdminMapping.setRole(superAdminRole); userRoles.save(superAdminMapping);
 		};
 	}
 	private Role ensureRole(RoleRepository roles, String name, String description) { return roles.findByName(name).orElseGet(() -> { Role role = new Role(); role.setName(name); role.setDescription(description); return roles.save(role); }); }

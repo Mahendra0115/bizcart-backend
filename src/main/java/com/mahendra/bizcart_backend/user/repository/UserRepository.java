@@ -1,6 +1,7 @@
 package com.mahendra.bizcart_backend.user.repository;
 
 import com.mahendra.bizcart_backend.user.entity.User;
+import com.mahendra.bizcart_backend.user.enums.UserType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +27,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 	boolean existsByUsername(String username);
 
 	boolean existsByPhoneAndIdNot(String phone, Long id);
+
+	boolean existsByUserType(UserType userType);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select user from User user where user.id = :userId")

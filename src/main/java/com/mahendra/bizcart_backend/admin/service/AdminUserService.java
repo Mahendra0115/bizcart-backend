@@ -40,7 +40,7 @@ public class AdminUserService {
 	}
 
 	@Transactional
-	public AdminUserResponse create(AdminUserRequest request) {
+	public AdminUserResponse create(Long actorId, AdminUserRequest request) {
 		String email = request.email().trim().toLowerCase(Locale.ROOT);
 		String username = request.username().trim().toLowerCase(Locale.ROOT);
 		if (users.existsByEmail(email) || users.existsByUsername(username)) throw conflict("Email or username is already registered");
@@ -50,7 +50,7 @@ public class AdminUserService {
 		user.setProfileImage(nullable(request.profileImage())); user.setPassword(passwordEncoder.encode(request.password()));
 		user.setUserType(UserType.ADMIN); user.setStatus(AccountStatus.ACTIVE); user.setEmailVerified(true);
 		user.setAdminApproved(true); user.setTokenVersion(0L);
-		user = users.save(user); replaceRoles(user, request.roleIds());
+		user = users.save(user); replaceRoles(actorId, user, request.roleIds());
 		return response(user);
 	}
 
@@ -64,13 +64,13 @@ public class AdminUserService {
 	public AdminUserResponse get(Long id) { return response(findAdmin(id)); }
 
 	@Transactional
-	public AdminUserResponse update(Long id, UpdateAdminUserRequest request) {
+	public AdminUserResponse update(Long actorId, Long id, UpdateAdminUserRequest request) {
 		User user = findAdmin(id);
 		user.setFirstName(request.firstName().trim()); user.setLastName(request.lastName().trim());
 		String phone = nullable(request.phone());
 		if (phone != null && users.existsByPhoneAndIdNot(phone, id)) throw conflict("Phone number is already registered");
 		user.setPhone(phone); user.setProfileImage(nullable(request.profileImage()));
-		replaceRoles(user, request.roleIds());
+		replaceRoles(actorId, user, request.roleIds());
 		user.setTokenVersion(user.getTokenVersion() + 1);
 		refreshTokens.revokeActiveTokensByUserId(id, LocalDateTime.now(), RefreshTokenRevocationReason.ADMIN_REVOKED, LocalDateTime.now());
 		return response(user);
@@ -89,14 +89,23 @@ public class AdminUserService {
 		if (user.getUserType() != UserType.ADMIN) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found");
 		return user;
 	}
-	private void replaceRoles(User user, Set<Long> roleIds) {
+	private void replaceRoles(Long actorId, User user, Set<Long> roleIds) {
 		List<Role> selected = roleIds.stream().map(roleId -> roles.findById(roleId)
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Role not found: " + roleId))).toList();
 		if (selected.stream().noneMatch(role -> "ADMIN".equals(role.getName()))) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An admin user must have the ADMIN role");
 		}
+		if (selected.stream().anyMatch(role -> isProtectedSystemRole(role.getName())) && !canAssignProtectedRoles(actorId)) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a super administrator can assign protected roles");
+		}
 		userRoles.deleteByUserId(user.getId());
 		for (Role role : selected) { UserRole mapping = new UserRole(); mapping.setUser(user); mapping.setRole(role); userRoles.save(mapping); }
+	}
+	private boolean canAssignProtectedRoles(Long actorId) {
+		return roles.findByUserId(actorId).stream().anyMatch(role -> "SUPER_ADMIN".equals(role.getName()));
+	}
+	private boolean isProtectedSystemRole(String roleName) {
+		return "ADMIN".equals(roleName) || "SUPER_ADMIN".equals(roleName) || "SYSTEM_OWNER".equals(roleName);
 	}
 	private AdminUserResponse response(User user) {
 		List<String> assignedRoles = roles.findByUserId(user.getId()).stream().map(Role::getName).sorted().toList();

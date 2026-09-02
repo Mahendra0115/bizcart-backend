@@ -27,9 +27,9 @@ public class AdminUserController {
 	private final AdminUserService service;
 	public AdminUserController(AdminUserService service) { this.service = service; }
 	@PostMapping @ResponseStatus(HttpStatus.CREATED) @PreAuthorize("hasAuthority('ADMIN_USERS_WRITE')")
-	public ApiResponse<AdminUserResponse> create(@Valid @RequestBody AdminUserRequest request) { return new ApiResponse<>("Admin user created successfully", service.create(request)); }
+	public ApiResponse<AdminUserResponse> create(@AuthenticationPrincipal AuthenticatedUserDetails actor, @Valid @RequestBody AdminUserRequest request) { return new ApiResponse<>("Admin user created successfully", service.create(actor.getId(), request)); }
 	@GetMapping @PreAuthorize("hasAuthority('ADMIN_USERS_READ')") public ApiResponse<List<AdminUserResponse>> list() { return new ApiResponse<>("Admin users fetched successfully", service.list()); }
 	@GetMapping("/{id}") @PreAuthorize("hasAuthority('ADMIN_USERS_READ')") public ApiResponse<AdminUserResponse> get(@PathVariable Long id) { return new ApiResponse<>("Admin user fetched successfully", service.get(id)); }
-	@PutMapping("/{id}") @PreAuthorize("hasAuthority('ADMIN_USERS_WRITE')") public ApiResponse<AdminUserResponse> update(@PathVariable Long id, @Valid @RequestBody UpdateAdminUserRequest request) { return new ApiResponse<>("Admin user updated successfully", service.update(id, request)); }
+	@PutMapping("/{id}") @PreAuthorize("hasAuthority('ADMIN_USERS_WRITE')") public ApiResponse<AdminUserResponse> update(@AuthenticationPrincipal AuthenticatedUserDetails actor, @PathVariable Long id, @Valid @RequestBody UpdateAdminUserRequest request) { return new ApiResponse<>("Admin user updated successfully", service.update(actor.getId(), id, request)); }
 	@DeleteMapping("/{id}") @PreAuthorize("hasAuthority('ADMIN_USERS_WRITE')") public ApiResponse<Void> deactivate(@AuthenticationPrincipal AuthenticatedUserDetails actor, @PathVariable Long id) { service.deactivate(actor.getId(), id); return new ApiResponse<>("Admin user deactivated successfully", null); }
 }
